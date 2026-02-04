@@ -104,3 +104,70 @@ No other Microsoft.Graph sub-modules are required. This keeps the dependency foo
 | Rename | Changes the device name (applies on next sync) |
 | Retire | Removes company data, keeps personal data |
 | Wipe | Factory resets the device (double confirmation required) |
+
+## Roadmap
+
+### Configuration Profiles & Compliance Policies
+- [ ] Browse and view device configuration profiles
+- [ ] View per-setting compliance status across devices
+- [ ] Compliance policy list with assignment details
+- [ ] Configuration profile conflict detection and display
+
+### App Management Enhancements
+- [ ] Create and edit app assignments directly from TUI
+- [ ] Win32 app dependency and supersedence visualization
+- [ ] App protection policy (MAM) browsing and status
+- [ ] VPP token status and license tracking for iOS/macOS
+
+### Bulk Operations
+- [ ] Multi-select devices for bulk sync, restart, or retire
+- [ ] Bulk assign apps to groups
+- [ ] Export device/user/app lists to CSV from any view
+
+### Scripts & Remediations
+- [ ] Browse and view PowerShell script assignments
+- [ ] Proactive remediation script status per device
+- [ ] Script execution history and output viewer
+
+### Enrollment
+- [ ] Autopilot device list and profile assignments
+- [ ] Enrollment status page (ESP) configuration viewer
+- [ ] Apple DEP/ABM token status and device sync
+
+### Security & Endpoint Protection
+- [ ] Microsoft Defender for Endpoint threat status per device
+- [ ] Security baseline assignment and compliance view
+- [ ] BitLocker recovery key lookup
+- [ ] Firewall and antivirus policy status
+
+### Conditional Access
+- [ ] Browse Conditional Access policies (read-only)
+- [ ] Named locations viewer
+- [ ] Sign-in log viewer with filtering
+
+### Reporting & Dashboards
+- [ ] Compliance trend charts using Spectre Canvas
+- [ ] Device enrollment trend over time
+- [ ] Stale device report (no check-in for X days)
+- [ ] App install failure summary with error codes
+- [ ] License utilization overview
+
+### Multi-Tenant Support
+- [ ] Saved tenant profiles with quick switching
+- [ ] Side-by-side tenant comparison views
+- [ ] Tenant health summary on connect
+
+### UX Improvements
+- [ ] Keyboard shortcut bar (vim-style navigation)
+- [ ] Bookmarkable views (save frequent navigation paths)
+- [ ] Local caching layer for faster repeated lookups
+- [ ] Configurable page sizes and refresh intervals
+- [ ] Live auto-refresh mode for monitoring dashboards
+- [ ] Search-as-you-type across all entity types
+- [ ] Command palette (Ctrl+P style) for quick navigation
+
+### Automation & Integration
+- [ ] Record actions as replayable PowerShell scripts
+- [ ] Webhook listener for real-time compliance change alerts
+- [ ] Pipe-friendly output mode for scripting (`Start-InTUI -NonInteractive`)
+- [ ] JSON/YAML export of device and policy configurations for diff/version control
