@@ -133,7 +133,8 @@ function Show-InTUIGroupList {
             }
         }
         if ($SearchTerm) {
-            $filter += "startswith(displayName,'$SearchTerm')"
+            $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
+            $filter += "startswith(displayName,'$safe')"
         }
 
         if ($filter.Count -gt 0) {
@@ -281,7 +282,7 @@ function Show-InTUIGroupDetail {
                 Clear-Host
                 Show-InTUIHeader
                 Show-InTUIBreadcrumb -Path @('Home', 'Groups', $group.displayName, 'Membership Rule')
-                Show-InTUIPanel -Title "Dynamic Membership Rule" -Content "[cyan]$($group.membershipRule ?? 'No rule defined')[/]" -BorderColor Cyan
+                Show-InTUIPanel -Title "Dynamic Membership Rule" -Content "[cyan]$($group.membershipRule ?? 'No rule defined')[/]" -BorderColor Cyan1
                 Write-SpectreHost "[grey]Processing State:[/] $($group.membershipRuleProcessingState ?? 'N/A')"
                 Read-InTUIKey
             }
@@ -314,7 +315,7 @@ function Show-InTUIGroupMembers {
     Show-InTUIBreadcrumb -Path @('Home', 'Groups', $GroupName, 'Members')
 
     $members = Show-InTUILoading -Title "[magenta]Loading members...[/]" -ScriptBlock {
-        Get-InTUIPagedResults -Uri "/groups/$GroupId/members" -PageSize 50 -Select 'id,displayName,userPrincipalName,mail,jobTitle,@odata.type'
+        Get-InTUIPagedResults -Uri "/groups/$GroupId/members" -PageSize 50 -Select 'id,displayName,userPrincipalName,mail,jobTitle'
     }
 
     if ($null -eq $members -or $members.Results.Count -eq 0) {

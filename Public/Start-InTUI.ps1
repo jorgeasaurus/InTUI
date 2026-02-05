@@ -79,6 +79,13 @@ function Start-InTUI {
             'Apps',
             'Users',
             'Groups',
+            'Configuration Profiles',
+            'Compliance Policies',
+            'Conditional Access',
+            'Enrollment',
+            'Scripts & Remediations',
+            'Security',
+            'Reports',
             '─────────────',
             'Refresh Dashboard',
             'Switch Tenant',
@@ -104,6 +111,34 @@ function Start-InTUI {
             'Groups' {
                 Write-InTUILog -Message "Navigating to Groups view"
                 Show-InTUIGroupsView
+            }
+            'Configuration Profiles' {
+                Write-InTUILog -Message "Navigating to Configuration Profiles view"
+                Show-InTUIConfigProfilesView
+            }
+            'Compliance Policies' {
+                Write-InTUILog -Message "Navigating to Compliance Policies view"
+                Show-InTUICompliancePoliciesView
+            }
+            'Conditional Access' {
+                Write-InTUILog -Message "Navigating to Conditional Access view"
+                Show-InTUIConditionalAccessView
+            }
+            'Enrollment' {
+                Write-InTUILog -Message "Navigating to Enrollment view"
+                Show-InTUIEnrollmentView
+            }
+            'Scripts & Remediations' {
+                Write-InTUILog -Message "Navigating to Scripts & Remediations view"
+                Show-InTUIScriptsView
+            }
+            'Security' {
+                Write-InTUILog -Message "Navigating to Security view"
+                Show-InTUISecurityView
+            }
+            'Reports' {
+                Write-InTUILog -Message "Navigating to Reports view"
+                Show-InTUIReportsView
             }
             'Refresh Dashboard' {
                 Write-InTUILog -Message "Refreshing dashboard"

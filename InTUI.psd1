@@ -11,7 +11,8 @@
     )
     FunctionsToExport = @(
         'Start-InTUI',
-        'Connect-InTUI'
+        'Connect-InTUI',
+        'Export-InTUIData'
     )
     PrivateData       = @{
         PSData = @{

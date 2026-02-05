@@ -105,7 +105,8 @@ function Show-InTUIAppList {
 
         $filter = @()
         if ($SearchTerm) {
-            $filter += "contains(displayName,'$SearchTerm')"
+            $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
+            $filter += "contains(displayName,'$safe')"
         }
         elseif ($PlatformFilter) {
             switch ($PlatformFilter) {
@@ -134,7 +135,7 @@ function Show-InTUIAppList {
             Uri      = '/deviceAppManagement/mobileApps'
             Beta     = $true
             PageSize = 25
-            Select   = 'id,displayName,description,publisher,createdDateTime,lastModifiedDateTime,@odata.type'
+            Select   = 'id,displayName,description,publisher,createdDateTime,lastModifiedDateTime'
         }
 
         if ($filter.Count -gt 0) {
@@ -269,7 +270,7 @@ function Show-InTUIAppDetail {
 [grey]Setup File Path:[/]   $($app.setupFilePath ?? 'N/A')
 [grey]Min OS Version:[/]    $($app.minimumSupportedOperatingSystem ?? 'N/A')
 "@
-            Show-InTUIPanel -Title "[cyan]Win32 App Details[/]" -Content $win32Content -BorderColor Cyan
+            Show-InTUIPanel -Title "[cyan]Win32 App Details[/]" -Content $win32Content -BorderColor Cyan1
         }
 
         $actionChoices = @(
@@ -457,7 +458,7 @@ function Show-InTUIAppInstallStatusMonitor {
     Show-InTUIBreadcrumb -Path @('Home', 'Apps', 'Install Status Monitor')
 
     $apps = Show-InTUILoading -Title "[green]Loading app status overview...[/]" -ScriptBlock {
-        Get-InTUIPagedResults -Uri '/deviceAppManagement/mobileApps' -Beta -PageSize 25 -Select 'id,displayName,@odata.type'
+        Get-InTUIPagedResults -Uri '/deviceAppManagement/mobileApps' -Beta -PageSize 25 -Select 'id,displayName'
     }
 
     if ($null -eq $apps -or $apps.Results.Count -eq 0) {

@@ -12,6 +12,7 @@ A PowerShell Spectre Console TUI for managing Microsoft Intune resources via Mic
 - **Apps** - Browse all managed apps, filter by platform or type (Win32, Store, Web, M365), view assignments, and monitor device/user install status
 - **Users** - Browse and search users, view managed devices, app installations, group memberships, and license details
 - **Groups** - Browse security, M365, and dynamic groups, view members, owners, device members, and dynamic membership rules
+- **Configuration Profiles** - Browse device configuration profiles, filter by platform (Windows, iOS, macOS, Android), view assignments, and device status summaries
 - **Dashboard** - Summary panels with device, app, user, and group counts plus compliance statistics
 
 ### Navigation
@@ -71,7 +72,8 @@ InTUI/
     ├── Devices.ps1            # Device management views
     ├── Apps.ps1               # App management views
     ├── Users.ps1              # User management views
-    └── Groups.ps1             # Group management views
+    ├── Groups.ps1             # Group management views
+    └── ConfigurationProfiles.ps1  # Configuration profile views
 ```
 
 ## Graph API Design
@@ -108,7 +110,7 @@ No other Microsoft.Graph sub-modules are required. This keeps the dependency foo
 ## Roadmap
 
 ### Configuration Profiles & Compliance Policies
-- [ ] Browse and view device configuration profiles
+- [x] Browse and view device configuration profiles
 - [ ] View per-setting compliance status across devices
 - [ ] Compliance policy list with assignment details
 - [ ] Configuration profile conflict detection and display

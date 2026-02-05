@@ -8,8 +8,7 @@ function Show-InTUIHeader {
         [string]$Subtitle
     )
 
-    $rule = New-SpectreRule -Title "[blue bold]InTUI[/] [grey]- Intune Terminal UI[/]" -Color Blue
-    Write-SpectreHost $rule
+    Write-SpectreRule -Title "[blue bold]InTUI[/] [grey]- Intune Terminal UI[/]" -Color Blue
 
     if ($script:Connected) {
         $tenant = if ($script:TenantId) { $script:TenantId } else { 'Unknown' }
@@ -90,10 +89,13 @@ function Show-InTUIMenu {
         [string[]]$Choices,
 
         [Parameter()]
-        [string]$Color = 'Blue'
+        [string]$Color = 'Blue',
+
+        [Parameter()]
+        [int]$PageSize = 15
     )
 
-    Read-SpectreSelection -Title $Title -Choices $Choices -Color $Color
+    Read-SpectreSelection -Title $Title -Choices $Choices -Color $Color -PageSize $PageSize
 }
 
 function Show-InTUIConfirm {
@@ -127,7 +129,7 @@ function Show-InTUIPanel {
         [string]$BorderColor = 'Blue'
     )
 
-    Format-SpectrePanel -Title $Title -Content $Content -Color $BorderColor | Write-SpectreHost
+    Format-SpectrePanel -Data $Content -Title $Title -Color $BorderColor | Out-SpectreHost
 }
 
 function Show-InTUITable {
@@ -159,7 +161,7 @@ function Show-InTUITable {
         $tableData.Add([PSCustomObject]$obj)
     }
 
-    $tableData | Format-SpectreTable -Title $Title -Color $BorderColor
+    $tableData | Format-SpectreTable -Title $Title -Color $BorderColor -AllowMarkup
 }
 
 function Show-InTUILoading {
@@ -190,7 +192,7 @@ function Show-InTUIError {
         [string]$Message
     )
 
-    Format-SpectrePanel -Title "[red]Error[/]" -Content "[red]$Message[/]" -Color Red | Write-SpectreHost
+    Format-SpectrePanel -Data "[red]$Message[/]" -Title "[red]Error[/]" -Color Red | Out-SpectreHost
 }
 
 function Show-InTUISuccess {
@@ -219,4 +221,38 @@ function Show-InTUIWarning {
     )
 
     Write-SpectreHost "[yellow]⚠[/] $Message"
+}
+
+function Get-InTUIConfigProfileType {
+    <#
+    .SYNOPSIS
+        Maps a device configuration @odata.type to a friendly name and platform.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$ODataType
+    )
+
+    if ([string]::IsNullOrEmpty($ODataType)) {
+        return @{ Platform = 'Unknown'; FriendlyName = 'Unknown' }
+    }
+
+    switch -Wildcard ($ODataType) {
+        '*windows10General*'            { return @{ Platform = 'Windows'; FriendlyName = 'General' } }
+        '*windows10Custom*'             { return @{ Platform = 'Windows'; FriendlyName = 'Custom' } }
+        '*windows10EndpointProtection*' { return @{ Platform = 'Windows'; FriendlyName = 'Endpoint Protection' } }
+        '*windowsUpdateForBusiness*'    { return @{ Platform = 'Windows'; FriendlyName = 'Update Ring' } }
+        '*iosGeneral*'                  { return @{ Platform = 'iOS'; FriendlyName = 'General' } }
+        '*iosCustom*'                   { return @{ Platform = 'iOS'; FriendlyName = 'Custom' } }
+        '*macOSGeneral*'                { return @{ Platform = 'macOS'; FriendlyName = 'General' } }
+        '*macOSCustom*'                 { return @{ Platform = 'macOS'; FriendlyName = 'Custom' } }
+        '*androidGeneral*'              { return @{ Platform = 'Android'; FriendlyName = 'General' } }
+        '*androidCustom*'               { return @{ Platform = 'Android'; FriendlyName = 'Custom' } }
+        default {
+            $rawType = $ODataType -replace '#microsoft\.graph\.', ''
+            return @{ Platform = 'Unknown'; FriendlyName = $rawType }
+        }
+    }
 }

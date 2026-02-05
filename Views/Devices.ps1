@@ -96,7 +96,8 @@ function Show-InTUIDeviceList {
 
         $filter = @()
         if ($SearchTerm) {
-            $filter += "contains(deviceName,'$SearchTerm')"
+            $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
+            $filter += "contains(deviceName,'$safe')"
         }
         else {
             if ($OSFilter) {
@@ -224,7 +225,7 @@ $icon [bold]$($device.deviceName)[/]
 [grey]Azure AD Device ID:[/]  $($device.azureADDeviceId ?? 'N/A')
 "@
 
-        Show-InTUIPanel -Title "[cyan]Hardware Information[/]" -Content $hwContent -BorderColor Cyan
+        Show-InTUIPanel -Title "[cyan]Hardware Information[/]" -Content $hwContent -BorderColor Cyan1
 
         $actionChoices = @(
             'Sync Device',

@@ -98,7 +98,10 @@ function Invoke-InTUIGraphRequest {
         [switch]$All,
 
         [Parameter()]
-        [int]$Top = 0
+        [int]$Top = 0,
+
+        [Parameter()]
+        [hashtable]$Headers
     )
 
     if (-not $script:Connected) {
@@ -133,6 +136,10 @@ function Invoke-InTUIGraphRequest {
         Uri    = $fullUri
         Method = $Method
         OutputType = 'PSObject'
+    }
+
+    if ($Headers) {
+        $params['Headers'] = $Headers
     }
 
     if ($Body) {
@@ -251,11 +258,24 @@ function Get-InTUIPagedResults {
                elseif ($response -is [array]) { $response }
                else { @($response) }
 
+    $totalCount = $response.'@odata.count' ?? @($results).Count
+
     return @{
         Results  = $results
         NextLink = $response.'@odata.nextLink'
-        Count    = $response.'@odata.count'
+        Count    = $totalCount
     }
+}
+
+function ConvertTo-InTUISafeFilterValue {
+    <#
+    .SYNOPSIS
+        Escapes a string for safe use inside an OData $filter expression.
+    #>
+    param([string]$Value)
+
+    if ([string]::IsNullOrEmpty($Value)) { return $Value }
+    return $Value -replace "'", "''"
 }
 
 function Format-InTUIDate {

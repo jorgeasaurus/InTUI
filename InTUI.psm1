@@ -4,7 +4,7 @@
 # InTUI - Intune Terminal User Interface
 # A Spectre Console based TUI for Microsoft Intune management
 
-$script:InTUIVersion = '1.1.0'
+$script:InTUIVersion = '1.0.0'
 $script:PageSize = 50
 $script:Connected = $false
 $script:CloudEnvironment = 'Global'
@@ -53,4 +53,4 @@ foreach ($folder in 'Private', 'Public', 'Views') {
     }
 }
 
-Export-ModuleMember -Function 'Start-InTUI', 'Connect-InTUI'
+Export-ModuleMember -Function 'Start-InTUI', 'Connect-InTUI', 'Export-InTUIData'

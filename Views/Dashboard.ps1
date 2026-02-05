@@ -9,21 +9,21 @@ function Show-InTUIDashboard {
     Write-InTUILog -Message "Loading dashboard data"
 
     $dashData = Show-InTUILoading -Title "[blue]Loading dashboard data...[/]" -ScriptBlock {
-        $devices = Invoke-InTUIGraphRequest -Uri '/deviceManagement/managedDevices?$top=1&$select=id' -Beta
-        $apps = Invoke-InTUIGraphRequest -Uri '/deviceAppManagement/mobileApps?$top=1&$select=id' -Beta
-        $users = Invoke-InTUIGraphRequest -Uri '/users?$top=1&$select=id&$count=true' -Method GET
-        $groups = Invoke-InTUIGraphRequest -Uri '/groups?$top=1&$select=id&$count=true' -Method GET
+        $countHeaders = @{ ConsistencyLevel = 'eventual' }
+        $devices = Invoke-InTUIGraphRequest -Uri '/deviceManagement/managedDevices?$top=1&$select=id&$count=true' -Beta -Headers $countHeaders
+        $apps = Invoke-InTUIGraphRequest -Uri '/deviceAppManagement/mobileApps?$top=1&$select=id&$count=true' -Beta -Headers $countHeaders
+        $users = Invoke-InTUIGraphRequest -Uri '/users?$top=1&$select=id&$count=true' -Headers $countHeaders
+        $groups = Invoke-InTUIGraphRequest -Uri '/groups?$top=1&$select=id&$count=true' -Headers $countHeaders
 
-        $compliant = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices?`$filter=complianceState eq 'compliant'&`$top=1&`$count=true&`$select=id" -Beta
-        $noncompliant = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices?`$filter=complianceState eq 'noncompliant'&`$top=1&`$count=true&`$select=id" -Beta
+        $compliance = Invoke-InTUIGraphRequest -Uri '/deviceManagement/deviceCompliancePolicyDeviceStateSummary' -Beta
 
         @{
-            DeviceCount      = $devices.'@odata.count' ?? @($devices.value).Count
-            AppCount         = $apps.'@odata.count' ?? @($apps.value).Count
-            UserCount        = $users.'@odata.count' ?? @($users.value).Count
-            GroupCount       = $groups.'@odata.count' ?? @($groups.value).Count
-            CompliantCount   = if ($compliant.'@odata.count') { $compliant.'@odata.count' } else { '?' }
-            NoncompliantCount = if ($noncompliant.'@odata.count') { $noncompliant.'@odata.count' } else { '?' }
+            DeviceCount       = $devices.'@odata.count' ?? @($devices.value).Count
+            AppCount          = $apps.'@odata.count' ?? @($apps.value).Count
+            UserCount         = $users.'@odata.count' ?? @($users.value).Count
+            GroupCount        = $groups.'@odata.count' ?? @($groups.value).Count
+            CompliantCount    = $compliance.compliantDeviceCount ?? '?'
+            NoncompliantCount = $compliance.nonCompliantDeviceCount ?? '?'
         }
     }
 
@@ -40,27 +40,27 @@ function Show-InTUIDashboard {
         Groups = $dashData.GroupCount
     }
 
-    $devicePanel = Format-SpectrePanel -Title "[blue]Devices[/]" -Content @"
+    $devicePanel = Format-SpectrePanel -Data @"
 [white bold]$($dashData.DeviceCount)[/] managed devices
 [green]$($dashData.CompliantCount)[/] compliant
 [red]$($dashData.NoncompliantCount)[/] non-compliant
-"@ -Color Blue
+"@ -Title "[blue]Devices[/]" -Color Blue
 
-    $appPanel = Format-SpectrePanel -Title "[green]Apps[/]" -Content @"
+    $appPanel = Format-SpectrePanel -Data @"
 [white bold]$($dashData.AppCount)[/] applications
-"@ -Color Green
+"@ -Title "[green]Apps[/]" -Color Green
 
-    $userPanel = Format-SpectrePanel -Title "[yellow]Users[/]" -Content @"
+    $userPanel = Format-SpectrePanel -Data @"
 [white bold]$($dashData.UserCount)[/] users
-"@ -Color Yellow
+"@ -Title "[yellow]Users[/]" -Color Yellow
 
-    $groupPanel = Format-SpectrePanel -Title "[magenta]Groups[/]" -Content @"
+    $groupPanel = Format-SpectrePanel -Data @"
 [white bold]$($dashData.GroupCount)[/] groups
-"@ -Color Magenta
+"@ -Title "[magenta]Groups[/]" -Color Magenta1
 
-    Write-SpectreHost $devicePanel
-    Write-SpectreHost $appPanel
-    Write-SpectreHost $userPanel
-    Write-SpectreHost $groupPanel
+    $devicePanel | Out-SpectreHost
+    $appPanel | Out-SpectreHost
+    $userPanel | Out-SpectreHost
+    $groupPanel | Out-SpectreHost
     Write-SpectreHost ""
 }

@@ -83,7 +83,8 @@ function Show-InTUIUserList {
         }
 
         if ($SearchTerm) {
-            $params['Filter'] = "startswith(displayName,'$SearchTerm') or startswith(userPrincipalName,'$SearchTerm') or startswith(mail,'$SearchTerm')"
+            $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
+            $params['Filter'] = "startswith(displayName,'$safe') or startswith(userPrincipalName,'$safe') or startswith(mail,'$safe')"
         }
 
         $users = Show-InTUILoading -Title "[yellow]Loading users...[/]" -ScriptBlock {
