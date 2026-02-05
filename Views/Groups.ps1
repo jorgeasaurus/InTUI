@@ -53,6 +53,8 @@ function Show-InTUIGroupsView {
 
         $selection = Show-InTUIMenu -Title "[magenta]Groups[/]" -Choices $groupChoices
 
+        Write-InTUILog -Message "Groups view selection" -Context @{ Selection = $selection }
+
         switch ($selection) {
             'All Groups' {
                 Show-InTUIGroupList
@@ -69,6 +71,7 @@ function Show-InTUIGroupsView {
             'Search Groups' {
                 $searchTerm = Read-SpectreText -Prompt "[magenta]Search groups by name[/]"
                 if ($searchTerm) {
+                    Write-InTUILog -Message "Searching groups" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIGroupList -SearchTerm $searchTerm
                 }
             }
@@ -108,16 +111,13 @@ function Show-InTUIGroupList {
         else { $breadcrumb += 'All Groups' }
         Show-InTUIBreadcrumb -Path $breadcrumb
 
-        $selectFields = 'id,displayName,description,groupTypes,mailEnabled,securityEnabled,membershipRule,createdDateTime'
-
         $params = @{
             Uri      = '/groups'
             PageSize = 25
-            Select   = $selectFields
+            Select   = 'id,displayName,description,groupTypes,mailEnabled,securityEnabled,membershipRule,createdDateTime'
             OrderBy  = 'displayName'
         }
 
-        # Build filter
         $filter = @()
         if ($TypeFilter) {
             switch ($TypeFilter) {
@@ -151,7 +151,6 @@ function Show-InTUIGroupList {
             continue
         }
 
-        # Build display choices
         $groupChoices = @()
         foreach ($group in $groups.Results) {
             $groupType = Get-InTUIGroupType -Group $group
@@ -217,7 +216,6 @@ function Show-InTUIGroupDetail {
         $groupType = Get-InTUIGroupType -Group $group
         $isDynamic = $group.groupTypes -contains 'DynamicMembership'
 
-        # Group Properties
         $propsContent = @"
 [bold white]$($group.displayName)[/]
 
@@ -242,19 +240,16 @@ function Show-InTUIGroupDetail {
 
         Show-InTUIPanel -Title "[magenta]Group Properties[/]" -Content $propsContent -BorderColor Magenta
 
-        # Get member count by fetching first page
         $memberCountData = Show-InTUILoading -Title "[magenta]Loading member count...[/]" -ScriptBlock {
-            $result = Invoke-InTUIGraphRequest -Uri "/groups/$GroupId/members?`$top=1&`$select=id"
-            return $result
+            Invoke-InTUIGraphRequest -Uri "/groups/$GroupId/members?`$top=1&`$select=id"
         }
 
         if ($null -ne $memberCountData) {
-            $count = if ($memberCountData.'@odata.count') { $memberCountData.'@odata.count' } else { ($memberCountData.value | Measure-Object).Count }
+            $count = $memberCountData.'@odata.count' ?? @($memberCountData.value).Count
             Write-SpectreHost "[grey]Members:[/] [white]$count[/]"
             Write-SpectreHost ""
         }
 
-        # Action menu
         $actionChoices = @(
             'View Members',
             'View Owners',
@@ -269,6 +264,8 @@ function Show-InTUIGroupDetail {
         $actionChoices += 'Back to Groups'
 
         $action = Show-InTUIMenu -Title "[magenta]Group Actions[/]" -Choices $actionChoices
+
+        Write-InTUILog -Message "Group detail action" -Context @{ GroupId = $GroupId; GroupName = $group.displayName; Action = $action }
 
         switch ($action) {
             'View Members' {
@@ -317,8 +314,7 @@ function Show-InTUIGroupMembers {
     Show-InTUIBreadcrumb -Path @('Home', 'Groups', $GroupName, 'Members')
 
     $members = Show-InTUILoading -Title "[magenta]Loading members...[/]" -ScriptBlock {
-        $result = Get-InTUIPagedResults -Uri "/groups/$GroupId/members" -PageSize 50 -Select 'id,displayName,userPrincipalName,mail,jobTitle,@odata.type'
-        return $result
+        Get-InTUIPagedResults -Uri "/groups/$GroupId/members" -PageSize 50 -Select 'id,displayName,userPrincipalName,mail,jobTitle,@odata.type'
     }
 
     if ($null -eq $members -or $members.Results.Count -eq 0) {
@@ -347,7 +343,6 @@ function Show-InTUIGroupMembers {
 
     Show-InTUITable -Title "Members of $GroupName" -Columns @('Name', 'Type', 'UPN/Email', 'Title') -Rows $rows
 
-    # Allow drilling into user members
     $userMembers = $members.Results | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.user' }
     if ($userMembers.Count -gt 0) {
         $choices = @($userMembers | ForEach-Object { $_.displayName })
@@ -385,11 +380,10 @@ function Show-InTUIGroupOwners {
     Show-InTUIBreadcrumb -Path @('Home', 'Groups', $GroupName, 'Owners')
 
     $owners = Show-InTUILoading -Title "[magenta]Loading owners...[/]" -ScriptBlock {
-        $result = Invoke-InTUIGraphRequest -Uri "/groups/$GroupId/owners?`$select=id,displayName,userPrincipalName,mail"
-        return $result
+        Invoke-InTUIGraphRequest -Uri "/groups/$GroupId/owners?`$select=id,displayName,userPrincipalName,mail"
     }
 
-    if ($null -eq $owners -or ($owners.value | Measure-Object).Count -eq 0) {
+    if (-not $owners.value) {
         Show-InTUIWarning "No owners found for this group."
         Read-InTUIKey
         return
@@ -427,8 +421,7 @@ function Show-InTUIGroupDeviceMembers {
     Show-InTUIBreadcrumb -Path @('Home', 'Groups', $GroupName, 'Device Members')
 
     $members = Show-InTUILoading -Title "[magenta]Loading device members...[/]" -ScriptBlock {
-        $result = Get-InTUIPagedResults -Uri "/groups/$GroupId/members/microsoft.graph.device" -PageSize 50 -Select 'id,displayName,operatingSystem,operatingSystemVersion,trustType,isManaged'
-        return $result
+        Get-InTUIPagedResults -Uri "/groups/$GroupId/members/microsoft.graph.device" -PageSize 50 -Select 'id,displayName,operatingSystem,operatingSystemVersion,trustType,isManaged'
     }
 
     if ($null -eq $members -or $members.Results.Count -eq 0) {

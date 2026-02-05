@@ -27,6 +27,8 @@ function Show-InTUIDevicesView {
 
         $selection = Show-InTUIMenu -Title "[blue]Devices[/]" -Choices $deviceChoices
 
+        Write-InTUILog -Message "Devices view selection" -Context @{ Selection = $selection }
+
         switch ($selection) {
             'All Devices' {
                 Show-InTUIDeviceList
@@ -49,6 +51,7 @@ function Show-InTUIDevicesView {
             'Search Device' {
                 $searchTerm = Read-SpectreText -Prompt "[blue]Search devices by name[/]"
                 if ($searchTerm) {
+                    Write-InTUILog -Message "Searching devices" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIDeviceList -SearchTerm $searchTerm
                 }
             }
@@ -91,35 +94,33 @@ function Show-InTUIDeviceList {
         else { $breadcrumb += 'All Devices' }
         Show-InTUIBreadcrumb -Path $breadcrumb
 
-        # Build filter
         $filter = @()
-        if ($OSFilter) {
-            switch ($OSFilter) {
-                'Windows' { $filter += "contains(operatingSystem,'Windows')" }
-                'iOS'     { $filter += "(operatingSystem eq 'iOS' or operatingSystem eq 'iPadOS')" }
-                'macOS'   { $filter += "operatingSystem eq 'macOS'" }
-                'Android' { $filter += "contains(operatingSystem,'Android')" }
+        if ($SearchTerm) {
+            $filter += "contains(deviceName,'$SearchTerm')"
+        }
+        else {
+            if ($OSFilter) {
+                switch ($OSFilter) {
+                    'Windows' { $filter += "contains(operatingSystem,'Windows')" }
+                    'iOS'     { $filter += "(operatingSystem eq 'iOS' or operatingSystem eq 'iPadOS')" }
+                    'macOS'   { $filter += "operatingSystem eq 'macOS'" }
+                    'Android' { $filter += "contains(operatingSystem,'Android')" }
+                }
+            }
+            if ($ComplianceFilter) {
+                $filter += "complianceState eq '$ComplianceFilter'"
             }
         }
-        if ($ComplianceFilter) {
-            $filter += "complianceState eq '$ComplianceFilter'"
-        }
-
-        $uri = '/deviceManagement/managedDevices'
-        $selectFields = 'id,deviceName,operatingSystem,osVersion,complianceState,managedDeviceOwnerType,enrolledDateTime,lastSyncDateTime,userPrincipalName,model,manufacturer,serialNumber,managementAgent'
 
         $params = @{
-            Uri      = $uri
+            Uri      = '/deviceManagement/managedDevices'
             Beta     = $true
             PageSize = 25
-            Select   = $selectFields
+            Select   = 'id,deviceName,operatingSystem,osVersion,complianceState,managedDeviceOwnerType,enrolledDateTime,lastSyncDateTime,userPrincipalName,model,manufacturer,serialNumber,managementAgent'
         }
 
         if ($filter.Count -gt 0) {
             $params['Filter'] = $filter -join ' and '
-        }
-        if ($SearchTerm) {
-            $params['Filter'] = "contains(deviceName,'$SearchTerm')"
         }
 
         $devices = Show-InTUILoading -Title "[blue]Loading devices...[/]" -ScriptBlock {
@@ -133,7 +134,6 @@ function Show-InTUIDeviceList {
             continue
         }
 
-        # Build display choices
         $deviceChoices = @()
         foreach ($device in $devices.Results) {
             $icon = Get-InTUIDeviceIcon -OperatingSystem $device.operatingSystem
@@ -157,7 +157,6 @@ function Show-InTUIDeviceList {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            # Find the selected device by matching index
             $idx = $deviceChoices.IndexOf($selection)
             if ($idx -ge 0 -and $idx -lt $devices.Results.Count) {
                 Show-InTUIDeviceDetail -DeviceId $devices.Results[$idx].id
@@ -195,7 +194,6 @@ function Show-InTUIDeviceDetail {
 
         Show-InTUIBreadcrumb -Path @('Home', 'Devices', $device.deviceName)
 
-        # Device Properties Panel
         $compColor = Get-InTUIComplianceColor -State $device.complianceState
         $icon = Get-InTUIDeviceIcon -OperatingSystem $device.operatingSystem
 
@@ -216,7 +214,6 @@ $icon [bold]$($device.deviceName)[/]
 
         Show-InTUIPanel -Title "[blue]Device Properties[/]" -Content $propertiesContent -BorderColor Blue
 
-        # Hardware info
         $hwContent = @"
 [grey]Storage (Total):[/]     $([math]::Round(($device.totalStorageSpaceInBytes / 1GB), 1)) GB
 [grey]Storage (Free):[/]      $([math]::Round(($device.freeStorageSpaceInBytes / 1GB), 1)) GB
@@ -229,7 +226,6 @@ $icon [bold]$($device.deviceName)[/]
 
         Show-InTUIPanel -Title "[cyan]Hardware Information[/]" -Content $hwContent -BorderColor Cyan
 
-        # Action menu
         $actionChoices = @(
             'Sync Device',
             'Restart Device',
@@ -243,6 +239,8 @@ $icon [bold]$($device.deviceName)[/]
         )
 
         $action = Show-InTUIMenu -Title "[blue]Device Actions[/]" -Choices $actionChoices
+
+        Write-InTUILog -Message "Device detail action" -Context @{ DeviceId = $DeviceId; DeviceName = $device.deviceName; Action = $action }
 
         switch ($action) {
             'Sync Device' {
@@ -314,6 +312,8 @@ function Invoke-InTUIDeviceAction {
         [hashtable]$Body
     )
 
+    Write-InTUILog -Message "Executing device action" -Context @{ DeviceId = $DeviceId; Action = $Action }
+
     $result = Show-InTUILoading -Title "[blue]Executing $Action...[/]" -ScriptBlock {
         $params = @{
             Uri    = "/deviceManagement/managedDevices/$DeviceId/$Action"
@@ -324,6 +324,7 @@ function Invoke-InTUIDeviceAction {
         Invoke-InTUIGraphRequest @params
     }
 
+    Write-InTUILog -Message "Device action completed" -Context @{ DeviceId = $DeviceId; Action = $Action }
     Show-InTUISuccess "Action '$Action' has been initiated."
     Read-InTUIKey
 }
@@ -350,7 +351,7 @@ function Show-InTUIDeviceConfigStatus {
         Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId/deviceConfigurationStates" -Beta
     }
 
-    if ($null -eq $configs -or ($configs.value | Measure-Object).Count -eq 0) {
+    if (-not $configs.value) {
         Show-InTUIWarning "No configuration profiles assigned to this device."
         Read-InTUIKey
         return
@@ -398,11 +399,10 @@ function Show-InTUIDeviceAppStatus {
     Show-InTUIBreadcrumb -Path @('Home', 'Devices', $DeviceName, 'App Install Status')
 
     $appStatuses = Show-InTUILoading -Title "[blue]Loading app install status...[/]" -ScriptBlock {
-        $detected = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId/detectedApps" -Beta
-        return $detected
+        Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId/detectedApps" -Beta
     }
 
-    if ($null -eq $appStatuses -or ($appStatuses.value | Measure-Object).Count -eq 0) {
+    if (-not $appStatuses.value) {
         Show-InTUIWarning "No app install data available for this device."
         Read-InTUIKey
         return
@@ -435,8 +435,7 @@ function Show-InTUIComplianceOverview {
     Show-InTUIBreadcrumb -Path @('Home', 'Devices', 'Compliance Overview')
 
     $complianceData = Show-InTUILoading -Title "[blue]Loading compliance data...[/]" -ScriptBlock {
-        $overview = Invoke-InTUIGraphRequest -Uri '/deviceManagement/managedDeviceOverview' -Beta
-        return $overview
+        Invoke-InTUIGraphRequest -Uri '/deviceManagement/managedDeviceOverview' -Beta
     }
 
     if ($null -eq $complianceData) {

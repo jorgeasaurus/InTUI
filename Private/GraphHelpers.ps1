@@ -2,6 +2,12 @@ function Connect-InTUIGraph {
     <#
     .SYNOPSIS
         Connects to Microsoft Graph with required scopes for Intune management.
+    .PARAMETER Scopes
+        Graph API permission scopes to request.
+    .PARAMETER TenantId
+        Optional tenant ID or domain.
+    .PARAMETER Environment
+        Cloud environment: Global, USGov, USGovDoD, or China.
     #>
     [CmdletBinding()]
     param(
@@ -17,12 +23,28 @@ function Connect-InTUIGraph {
         ),
 
         [Parameter()]
-        [string]$TenantId
+        [string]$TenantId,
+
+        [Parameter()]
+        [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
+        [string]$Environment = 'Global'
     )
+
+    $script:CloudEnvironment = $Environment
+    $envConfig = $script:CloudEnvironments[$Environment]
+    $script:GraphBaseUrl = $envConfig.GraphBaseUrl
+    $script:GraphBetaUrl = $envConfig.GraphBetaUrl
+
+    Write-InTUILog -Message "Connecting to Microsoft Graph" -Context @{
+        Environment = $Environment
+        GraphBaseUrl = $script:GraphBaseUrl
+        TenantId = $TenantId
+    }
 
     $params = @{
         Scopes = $Scopes
         NoWelcome = $true
+        Environment = $envConfig.MgEnvironment
     }
 
     if ($TenantId) {
@@ -36,10 +58,16 @@ function Connect-InTUIGraph {
             $script:Connected = $true
             $script:TenantId = $context.TenantId
             $script:Account = $context.Account
+            Write-InTUILog -Message "Connected to Microsoft Graph" -Context @{
+                TenantId = $context.TenantId
+                Account = $context.Account
+                Environment = $Environment
+            }
             return $true
         }
     }
     catch {
+        Write-InTUILog -Level 'ERROR' -Message "Failed to connect to Microsoft Graph: $($_.Exception.Message)"
         Write-SpectreHost "[red]Failed to connect to Microsoft Graph: $($_.Exception.Message)[/]"
         return $false
     }
@@ -74,13 +102,13 @@ function Invoke-InTUIGraphRequest {
     )
 
     if (-not $script:Connected) {
+        Write-InTUILog -Level 'WARN' -Message "Graph request attempted while not connected" -Context @{ Uri = $Uri }
         Write-SpectreHost "[red]Not connected to Microsoft Graph. Run Connect-InTUI first.[/]"
         return $null
     }
 
     $baseUrl = if ($Beta) { $script:GraphBetaUrl } else { $script:GraphBaseUrl }
 
-    # Build the full URI
     if ($Uri -notmatch '^https://') {
         $fullUri = "$baseUrl/$($Uri.TrimStart('/'))"
     }
@@ -88,10 +116,17 @@ function Invoke-InTUIGraphRequest {
         $fullUri = $Uri
     }
 
-    # Add $top parameter if specified
     if ($Top -gt 0 -and $Method -eq 'GET') {
         $separator = if ($fullUri -match '\?') { '&' } else { '?' }
         $fullUri = "$fullUri$separator`$top=$Top"
+    }
+
+    Write-InTUILog -Message "Graph API request" -Context @{
+        Method = $Method
+        Uri = $fullUri
+        Beta = [bool]$Beta
+        All = [bool]$All
+        Environment = $script:CloudEnvironment
     }
 
     $params = @{
@@ -109,26 +144,27 @@ function Invoke-InTUIGraphRequest {
         $response = Invoke-MgGraphRequest @params
 
         if ($All -and $Method -eq 'GET') {
-            # Handle pagination
-            $allResults = @()
+            $allResults = [System.Collections.Generic.List[object]]::new()
             if ($response.value) {
-                $allResults += $response.value
+                $allResults.AddRange(@($response.value))
             }
 
+            $pageCount = 1
             while ($response.'@odata.nextLink') {
+                $pageCount++
+                Write-InTUILog -Message "Fetching pagination page $pageCount" -Context @{ NextLink = $response.'@odata.nextLink' }
                 $response = Invoke-MgGraphRequest -Uri $response.'@odata.nextLink' -Method GET -OutputType PSObject
                 if ($response.value) {
-                    $allResults += $response.value
+                    $allResults.AddRange(@($response.value))
                 }
             }
 
+            Write-InTUILog -Message "Graph API request completed" -Context @{ TotalResults = $allResults.Count; Pages = $pageCount }
             return $allResults
         }
 
-        if ($response.value) {
-            return $response
-        }
-
+        $resultCount = if ($response.value) { @($response.value).Count } else { 1 }
+        Write-InTUILog -Message "Graph API request completed" -Context @{ ResultCount = $resultCount }
         return $response
     }
     catch {
@@ -142,6 +178,7 @@ function Invoke-InTUIGraphRequest {
                 $errorMessage = $_.ErrorDetails.Message
             }
         }
+        Write-InTUILog -Level 'ERROR' -Message "Graph API Error: $errorMessage" -Context @{ Uri = $fullUri; Method = $Method }
         Write-SpectreHost "[red]Graph API Error: $errorMessage[/]"
         return $null
     }
@@ -205,16 +242,17 @@ function Get-InTUIPagedResults {
         $fullUri = "$Uri`?$($queryParams -join '&')"
     }
 
-    $params = @{
-        Uri    = $fullUri
-        Method = 'GET'
-    }
+    $params = @{ Uri = $fullUri }
     if ($Beta) { $params['Beta'] = $true }
 
     $response = Invoke-InTUIGraphRequest @params
 
+    $results = if ($response.value) { $response.value }
+               elseif ($response -is [array]) { $response }
+               else { @($response) }
+
     return @{
-        Results  = if ($response.value) { $response.value } elseif ($response -is [array]) { $response } else { @($response) }
+        Results  = $results
         NextLink = $response.'@odata.nextLink'
         Count    = $response.'@odata.count'
     }
@@ -260,14 +298,30 @@ function Get-InTUIComplianceColor {
     param([string]$State)
 
     switch ($State) {
-        'compliant'    { return 'green' }
-        'noncompliant' { return 'red' }
+        'compliant'     { return 'green' }
+        'noncompliant'  { return 'red' }
+        'error'         { return 'red' }
         'inGracePeriod' { return 'yellow' }
         'configManager' { return 'blue' }
-        'conflict'     { return 'orange1' }
-        'error'        { return 'red' }
-        'unknown'      { return 'grey' }
-        default        { return 'grey' }
+        'conflict'      { return 'orange1' }
+        default         { return 'grey' }
+    }
+}
+
+function Get-InTUIInstallStateColor {
+    <#
+    .SYNOPSIS
+        Returns Spectre markup color based on app install state.
+    #>
+    param([string]$State)
+
+    switch ($State) {
+        'installed'       { return 'green' }
+        'failed'          { return 'red' }
+        'uninstallFailed' { return 'red' }
+        'notInstalled'    { return 'grey' }
+        'notApplicable'   { return 'grey' }
+        default           { return 'yellow' }
     }
 }
 

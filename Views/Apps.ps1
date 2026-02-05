@@ -29,6 +29,8 @@ function Show-InTUIAppsView {
 
         $selection = Show-InTUIMenu -Title "[green]Apps[/]" -Choices $appChoices
 
+        Write-InTUILog -Message "Apps view selection" -Context @{ Selection = $selection }
+
         switch ($selection) {
             'All Apps' {
                 Show-InTUIAppList
@@ -57,6 +59,7 @@ function Show-InTUIAppsView {
             'Search Apps' {
                 $searchTerm = Read-SpectreText -Prompt "[green]Search apps by name[/]"
                 if ($searchTerm) {
+                    Write-InTUILog -Message "Searching apps" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIAppList -SearchTerm $searchTerm
                 }
             }
@@ -100,9 +103,11 @@ function Show-InTUIAppList {
         else { $breadcrumb += 'All Apps' }
         Show-InTUIBreadcrumb -Path $breadcrumb
 
-        # Build filter
         $filter = @()
-        if ($PlatformFilter) {
+        if ($SearchTerm) {
+            $filter += "contains(displayName,'$SearchTerm')"
+        }
+        elseif ($PlatformFilter) {
             switch ($PlatformFilter) {
                 'windows' {
                     $filter += "(isof('microsoft.graph.win32LobApp') or isof('microsoft.graph.windowsMobileMSI') or isof('microsoft.graph.windowsUniversalAppX') or isof('microsoft.graph.windowsMicrosoftEdgeApp') or isof('microsoft.graph.windowsStoreApp'))"
@@ -118,28 +123,22 @@ function Show-InTUIAppList {
                 }
             }
         }
-        if ($TypeFilter -eq 'webApp') {
+        elseif ($TypeFilter -eq 'webApp') {
             $filter += "isof('microsoft.graph.webApp')"
         }
-        if ($TypeFilter -eq 'officeSuite') {
+        elseif ($TypeFilter -eq 'officeSuite') {
             $filter += "isof('microsoft.graph.officeSuiteApp')"
         }
 
-        $uri = '/deviceAppManagement/mobileApps'
-        $selectFields = 'id,displayName,description,publisher,createdDateTime,lastModifiedDateTime,@odata.type'
-
         $params = @{
-            Uri      = $uri
+            Uri      = '/deviceAppManagement/mobileApps'
             Beta     = $true
             PageSize = 25
-            Select   = $selectFields
+            Select   = 'id,displayName,description,publisher,createdDateTime,lastModifiedDateTime,@odata.type'
         }
 
         if ($filter.Count -gt 0) {
             $params['Filter'] = $filter -join ' and '
-        }
-        if ($SearchTerm) {
-            $params['Filter'] = "contains(displayName,'$SearchTerm')"
         }
 
         $apps = Show-InTUILoading -Title "[green]Loading apps...[/]" -ScriptBlock {
@@ -153,7 +152,6 @@ function Show-InTUIAppList {
             continue
         }
 
-        # Build display choices
         $appChoices = @()
         foreach ($app in $apps.Results) {
             $appType = Get-InTUIAppTypeFriendlyName -ODataType $app.'@odata.type'
@@ -198,16 +196,16 @@ function Get-InTUIAppTypeFriendlyName {
         '*windowsStoreApp'        { return 'Store (Win)' }
         '*officeSuiteApp'         { return 'M365 Apps' }
         '*iosVppApp'              { return 'iOS VPP' }
+        '*managedIOSStoreApp'     { return 'iOS Managed' }
         '*iosStoreApp'            { return 'iOS Store' }
         '*iosLobApp'              { return 'iOS LOB' }
-        '*managedIOSStoreApp'     { return 'iOS Managed' }
         '*macOSLobApp'            { return 'macOS LOB' }
         '*macOSDmgApp'            { return 'macOS DMG' }
         '*macOSMicrosoftEdgeApp'  { return 'macOS Edge' }
-        '*androidStoreApp'        { return 'Android Store' }
-        '*androidLobApp'          { return 'Android LOB' }
         '*managedAndroidStoreApp' { return 'Android Managed' }
         '*androidManagedStoreApp' { return 'Managed Google Play' }
+        '*androidStoreApp'        { return 'Android Store' }
+        '*androidLobApp'          { return 'Android LOB' }
         '*webApp'                 { return 'Web App' }
         '*microsoftStoreForBusinessApp' { return 'Store for Business' }
         default                   { return ($ODataType -replace '#microsoft\.graph\.', '') }
@@ -245,7 +243,6 @@ function Show-InTUIAppDetail {
 
         $appType = Get-InTUIAppTypeFriendlyName -ODataType $app.'@odata.type'
 
-        # App Properties
         $propsContent = @"
 [bold white]$($app.displayName)[/]
 
@@ -264,7 +261,6 @@ function Show-InTUIAppDetail {
 
         Show-InTUIPanel -Title "[green]App Properties[/]" -Content $propsContent -BorderColor Green
 
-        # Show type-specific info for Win32 apps
         if ($app.'@odata.type' -match 'win32LobApp') {
             $win32Content = @"
 [grey]File Name:[/]         $($app.fileName ?? 'N/A')
@@ -276,7 +272,6 @@ function Show-InTUIAppDetail {
             Show-InTUIPanel -Title "[cyan]Win32 App Details[/]" -Content $win32Content -BorderColor Cyan
         }
 
-        # Action menu
         $actionChoices = @(
             'View Assignments',
             'View Device Install Status',
@@ -286,6 +281,8 @@ function Show-InTUIAppDetail {
         )
 
         $action = Show-InTUIMenu -Title "[green]App Actions[/]" -Choices $actionChoices
+
+        Write-InTUILog -Message "App detail action" -Context @{ AppId = $AppId; AppName = $app.displayName; Action = $action }
 
         switch ($action) {
             'View Assignments' {
@@ -329,7 +326,7 @@ function Show-InTUIAppAssignments {
         Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/assignments" -Beta
     }
 
-    if ($null -eq $assignments -or ($assignments.value | Measure-Object).Count -eq 0) {
+    if (-not $assignments.value) {
         Show-InTUIWarning "No assignments found for this app."
         Read-InTUIKey
         return
@@ -382,7 +379,7 @@ function Show-InTUIAppDeviceStatus {
         Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/deviceStatuses?`$top=50" -Beta
     }
 
-    if ($null -eq $statuses -or ($statuses.value | Measure-Object).Count -eq 0) {
+    if (-not $statuses.value) {
         Show-InTUIWarning "No device install status data available."
         Read-InTUIKey
         return
@@ -390,13 +387,7 @@ function Show-InTUIAppDeviceStatus {
 
     $rows = @()
     foreach ($status in $statuses.value) {
-        $installColor = switch ($status.installState) {
-            'installed'   { 'green' }
-            'failed'      { 'red' }
-            'notInstalled' { 'grey' }
-            'uninstallFailed' { 'red' }
-            default       { 'yellow' }
-        }
+        $installColor = Get-InTUIInstallStateColor -State $status.installState
 
         $rows += , @(
             ($status.deviceName ?? 'N/A'),
@@ -433,7 +424,7 @@ function Show-InTUIAppUserStatus {
         Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/userStatuses?`$top=50" -Beta
     }
 
-    if ($null -eq $statuses -or ($statuses.value | Measure-Object).Count -eq 0) {
+    if (-not $statuses.value) {
         Show-InTUIWarning "No user install status data available."
         Read-InTUIKey
         return
@@ -466,8 +457,7 @@ function Show-InTUIAppInstallStatusMonitor {
     Show-InTUIBreadcrumb -Path @('Home', 'Apps', 'Install Status Monitor')
 
     $apps = Show-InTUILoading -Title "[green]Loading app status overview...[/]" -ScriptBlock {
-        $response = Get-InTUIPagedResults -Uri '/deviceAppManagement/mobileApps' -Beta -PageSize 25 -Select 'id,displayName,@odata.type'
-        return $response
+        Get-InTUIPagedResults -Uri '/deviceAppManagement/mobileApps' -Beta -PageSize 25 -Select 'id,displayName,@odata.type'
     }
 
     if ($null -eq $apps -or $apps.Results.Count -eq 0) {

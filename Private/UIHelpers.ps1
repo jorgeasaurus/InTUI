@@ -14,7 +14,10 @@ function Show-InTUIHeader {
     if ($script:Connected) {
         $tenant = if ($script:TenantId) { $script:TenantId } else { 'Unknown' }
         $account = if ($script:Account) { $script:Account } else { 'Unknown' }
-        Write-SpectreHost "[grey]Tenant:[/] [cyan]$tenant[/] [grey]|[/] [grey]Account:[/] [cyan]$account[/]"
+        $envLabel = if ($script:CloudEnvironments -and $script:CloudEnvironment) {
+            $script:CloudEnvironments[$script:CloudEnvironment].Label
+        } else { 'Global' }
+        Write-SpectreHost "[grey]Tenant:[/] [cyan]$tenant[/] [grey]|[/] [grey]Account:[/] [cyan]$account[/] [grey]|[/] [grey]Environment:[/] [cyan]$envLabel[/]"
     }
 
     if ($Subtitle) {
@@ -90,8 +93,7 @@ function Show-InTUIMenu {
         [string]$Color = 'Blue'
     )
 
-    $selection = Read-SpectreSelection -Title $Title -Choices $Choices -Color $Color
-    return $selection
+    Read-SpectreSelection -Title $Title -Choices $Choices -Color $Color
 }
 
 function Show-InTUIConfirm {
@@ -105,8 +107,7 @@ function Show-InTUIConfirm {
         [string]$Message
     )
 
-    $result = Read-SpectreConfirm -Prompt $Message
-    return $result
+    Read-SpectreConfirm -Prompt $Message
 }
 
 function Show-InTUIPanel {
@@ -123,17 +124,10 @@ function Show-InTUIPanel {
         [string]$Content,
 
         [Parameter()]
-        [string]$BorderColor = 'Blue',
-
-        [Parameter()]
-        [switch]$Expand
+        [string]$BorderColor = 'Blue'
     )
 
-    $panel = Format-SpectrePanel -Title $Title -Content $Content -Color $BorderColor
-    if ($Expand) {
-        $panel = $panel
-    }
-    Write-SpectreHost $panel
+    Format-SpectrePanel -Title $Title -Content $Content -Color $BorderColor | Write-SpectreHost
 }
 
 function Show-InTUITable {
@@ -156,13 +150,13 @@ function Show-InTUITable {
         [string]$BorderColor = 'Blue'
     )
 
-    $tableData = @()
+    $tableData = [System.Collections.Generic.List[PSCustomObject]]::new()
     foreach ($row in $Rows) {
         $obj = [ordered]@{}
         for ($i = 0; $i -lt $Columns.Count; $i++) {
             $obj[$Columns[$i]] = if ($i -lt $row.Count) { $row[$i] } else { '' }
         }
-        $tableData += [PSCustomObject]$obj
+        $tableData.Add([PSCustomObject]$obj)
     }
 
     $tableData | Format-SpectreTable -Title $Title -Color $BorderColor
@@ -225,41 +219,4 @@ function Show-InTUIWarning {
     )
 
     Write-SpectreHost "[yellow]⚠[/] $Message"
-}
-
-function ConvertTo-InTUITableData {
-    <#
-    .SYNOPSIS
-        Converts an array of PSObjects to table-ready format.
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [array]$Data,
-
-        [Parameter(Mandatory)]
-        [hashtable[]]$ColumnMap
-    )
-
-    $rows = @()
-    foreach ($item in $Data) {
-        $row = @()
-        foreach ($col in $ColumnMap) {
-            $value = $item
-            foreach ($prop in $col.Property.Split('.')) {
-                if ($null -ne $value) {
-                    $value = $value.$prop
-                }
-            }
-
-            if ($col.Transform) {
-                $value = & $col.Transform $value
-            }
-
-            $row += if ($null -ne $value) { [string]$value } else { 'N/A' }
-        }
-        $rows += , $row
-    }
-
-    return $rows
 }

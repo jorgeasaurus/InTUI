@@ -34,17 +34,21 @@ param(
     [string]$TenantId,
 
     [Parameter()]
+    [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
+    [string]$Environment = 'Global',
+
+    [Parameter()]
     [switch]$Install
 )
 
 $ErrorActionPreference = 'Stop'
 
-# Install dependencies if requested
+$requiredModules = @('Microsoft.Graph.Authentication', 'PwshSpectreConsole')
+
 if ($Install) {
     Write-Host "Installing required modules..." -ForegroundColor Cyan
 
-    $modules = @('Microsoft.Graph.Authentication', 'PwshSpectreConsole')
-    foreach ($mod in $modules) {
+    foreach ($mod in $requiredModules) {
         if (-not (Get-Module -ListAvailable -Name $mod)) {
             Write-Host "  Installing $mod..." -ForegroundColor Yellow
             Install-Module -Name $mod -Scope CurrentUser -Force -AllowClobber
@@ -59,13 +63,7 @@ if ($Install) {
     return
 }
 
-# Verify prerequisites
-$missingModules = @()
-foreach ($mod in @('Microsoft.Graph.Authentication', 'PwshSpectreConsole')) {
-    if (-not (Get-Module -ListAvailable -Name $mod)) {
-        $missingModules += $mod
-    }
-}
+$missingModules = @($requiredModules | Where-Object { -not (Get-Module -ListAvailable -Name $_) })
 
 if ($missingModules.Count -gt 0) {
     Write-Host "`nMissing required modules:" -ForegroundColor Red
@@ -76,12 +74,10 @@ if ($missingModules.Count -gt 0) {
     return
 }
 
-# Import the module
 $modulePath = Join-Path $PSScriptRoot 'InTUI.psd1'
 Import-Module $modulePath -Force
 
-# Launch
-$params = @{}
+$params = @{ Environment = $Environment }
 if ($TenantId) { $params['TenantId'] = $TenantId }
 
 Start-InTUI @params

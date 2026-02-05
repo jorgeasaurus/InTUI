@@ -4,42 +4,52 @@
 # InTUI - Intune Terminal User Interface
 # A Spectre Console based TUI for Microsoft Intune management
 
-$script:InTUIVersion = '1.0.0'
-$script:GraphBaseUrl = 'https://graph.microsoft.com/v1.0'
-$script:GraphBetaUrl = 'https://graph.microsoft.com/beta'
+$script:InTUIVersion = '1.1.0'
 $script:PageSize = 50
 $script:Connected = $false
+$script:CloudEnvironment = 'Global'
 
-# Import all private functions
-$PrivateFunctions = Get-ChildItem -Path "$PSScriptRoot/Private/*.ps1" -ErrorAction SilentlyContinue
-foreach ($Function in $PrivateFunctions) {
-    try {
-        . $Function.FullName
+# Cloud environment definitions
+# GCC uses worldwide endpoints; GCC High uses graph.microsoft.us
+# See: https://learn.microsoft.com/en-us/graph/deployments
+$script:CloudEnvironments = @{
+    'Global' = @{
+        GraphBaseUrl = 'https://graph.microsoft.com/v1.0'
+        GraphBetaUrl = 'https://graph.microsoft.com/beta'
+        MgEnvironment = 'Global'
+        Label = 'Commercial / GCC (Global)'
     }
-    catch {
-        Write-Error "Failed to import $($Function.FullName): $_"
+    'USGov' = @{
+        GraphBaseUrl = 'https://graph.microsoft.us/v1.0'
+        GraphBetaUrl = 'https://graph.microsoft.us/beta'
+        MgEnvironment = 'USGov'
+        Label = 'US Government (GCC High)'
+    }
+    'USGovDoD' = @{
+        GraphBaseUrl = 'https://dod-graph.microsoft.us/v1.0'
+        GraphBetaUrl = 'https://dod-graph.microsoft.us/beta'
+        MgEnvironment = 'USGovDoD'
+        Label = 'US Government (DoD)'
+    }
+    'China' = @{
+        GraphBaseUrl = 'https://microsoftgraph.chinacloudapi.cn/v1.0'
+        GraphBetaUrl = 'https://microsoftgraph.chinacloudapi.cn/beta'
+        MgEnvironment = 'China'
+        Label = 'China (21Vianet)'
     }
 }
 
-# Import all public functions
-$PublicFunctions = Get-ChildItem -Path "$PSScriptRoot/Public/*.ps1" -ErrorAction SilentlyContinue
-foreach ($Function in $PublicFunctions) {
-    try {
-        . $Function.FullName
-    }
-    catch {
-        Write-Error "Failed to import $($Function.FullName): $_"
-    }
-}
+$script:GraphBaseUrl = $script:CloudEnvironments['Global'].GraphBaseUrl
+$script:GraphBetaUrl = $script:CloudEnvironments['Global'].GraphBetaUrl
 
-# Import all view functions
-$ViewFunctions = Get-ChildItem -Path "$PSScriptRoot/Views/*.ps1" -ErrorAction SilentlyContinue
-foreach ($Function in $ViewFunctions) {
-    try {
-        . $Function.FullName
-    }
-    catch {
-        Write-Error "Failed to import $($Function.FullName): $_"
+foreach ($folder in 'Private', 'Public', 'Views') {
+    foreach ($file in Get-ChildItem -Path "$PSScriptRoot/$folder/*.ps1" -ErrorAction SilentlyContinue) {
+        try {
+            . $file.FullName
+        }
+        catch {
+            Write-Error "Failed to import $($file.FullName): $_"
+        }
     }
 }
 

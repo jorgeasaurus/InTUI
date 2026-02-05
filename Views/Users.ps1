@@ -23,6 +23,8 @@ function Show-InTUIUsersView {
 
         $selection = Show-InTUIMenu -Title "[yellow]Users[/]" -Choices $userChoices
 
+        Write-InTUILog -Message "Users view selection" -Context @{ Selection = $selection }
+
         switch ($selection) {
             'All Users' {
                 Show-InTUIUserList
@@ -33,6 +35,7 @@ function Show-InTUIUsersView {
             'Search Users' {
                 $searchTerm = Read-SpectreText -Prompt "[yellow]Search users by name or email[/]"
                 if ($searchTerm) {
+                    Write-InTUILog -Message "Searching users" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIUserList -SearchTerm $searchTerm
                 }
             }
@@ -72,12 +75,10 @@ function Show-InTUIUserList {
         else { $breadcrumb += 'All Users' }
         Show-InTUIBreadcrumb -Path $breadcrumb
 
-        $selectFields = 'id,displayName,userPrincipalName,mail,jobTitle,department,accountEnabled,createdDateTime,assignedLicenses'
-
         $params = @{
             Uri      = '/users'
             PageSize = 25
-            Select   = $selectFields
+            Select   = 'id,displayName,userPrincipalName,mail,jobTitle,department,accountEnabled,createdDateTime,assignedLicenses'
             OrderBy  = 'displayName'
         }
 
@@ -96,10 +97,9 @@ function Show-InTUIUserList {
             continue
         }
 
-        # Filter licensed users if requested
         $filteredUsers = $users.Results
         if ($LicensedOnly) {
-            $filteredUsers = $users.Results | Where-Object { ($_.assignedLicenses | Measure-Object).Count -gt 0 }
+            $filteredUsers = $users.Results | Where-Object { $_.assignedLicenses.Count -gt 0 }
             if ($filteredUsers.Count -eq 0) {
                 Show-InTUIWarning "No licensed users found in this page."
                 Read-InTUIKey
@@ -108,12 +108,11 @@ function Show-InTUIUserList {
             }
         }
 
-        # Build display choices
         $userChoices = @()
         foreach ($user in $filteredUsers) {
             $enabled = if ($user.accountEnabled) { '[green]●[/]' } else { '[red]●[/]' }
             $dept = if ($user.department) { $user.department } else { 'N/A' }
-            $licenses = ($user.assignedLicenses | Measure-Object).Count
+            $licenses = @($user.assignedLicenses).Count
 
             $displayName = "$enabled [white]$($user.displayName)[/] [grey]| $($user.userPrincipalName) | $dept | $licenses license(s)[/]"
             $userChoices += $displayName
@@ -169,7 +168,6 @@ function Show-InTUIUserDetail {
 
         $enabled = if ($user.accountEnabled) { '[green]Enabled[/]' } else { '[red]Disabled[/]' }
 
-        # User Properties
         $propsContent = @"
 [bold white]$($user.displayName)[/] $enabled
 
@@ -186,12 +184,11 @@ function Show-InTUIUserDetail {
 [grey]State:[/]             $($user.state ?? 'N/A')
 [grey]Country:[/]           $($user.country ?? 'N/A')
 [grey]Created:[/]           $(Format-InTUIDate -DateString $user.createdDateTime)
-[grey]Licenses:[/]          $(($user.assignedLicenses | Measure-Object).Count) assigned
+[grey]Licenses:[/]          $(@($user.assignedLicenses).Count) assigned
 "@
 
         Show-InTUIPanel -Title "[yellow]User Properties[/]" -Content $propsContent -BorderColor Yellow
 
-        # Action menu
         $actionChoices = @(
             'View Managed Devices',
             'View App Installations',
@@ -202,6 +199,8 @@ function Show-InTUIUserDetail {
         )
 
         $action = Show-InTUIMenu -Title "[yellow]User Actions[/]" -Choices $actionChoices
+
+        Write-InTUILog -Message "User detail action" -Context @{ UserId = $UserId; UserName = $user.displayName; Action = $action }
 
         switch ($action) {
             'View Managed Devices' {
@@ -245,11 +244,10 @@ function Show-InTUIUserDevices {
     Show-InTUIBreadcrumb -Path @('Home', 'Users', $UserName, 'Managed Devices')
 
     $devices = Show-InTUILoading -Title "[yellow]Loading user devices...[/]" -ScriptBlock {
-        $managed = Invoke-InTUIGraphRequest -Uri "/users/$UserId/managedDevices?`$select=id,deviceName,operatingSystem,osVersion,complianceState,lastSyncDateTime,model,manufacturer" -Beta
-        return $managed
+        Invoke-InTUIGraphRequest -Uri "/users/$UserId/managedDevices?`$select=id,deviceName,operatingSystem,osVersion,complianceState,lastSyncDateTime,model,manufacturer" -Beta
     }
 
-    if ($null -eq $devices -or ($devices.value | Measure-Object).Count -eq 0) {
+    if (-not $devices.value) {
         Show-InTUIWarning "No managed devices found for this user."
         Read-InTUIKey
         return
@@ -271,7 +269,6 @@ function Show-InTUIUserDevices {
 
     Show-InTUITable -Title "Managed Devices for $UserName" -Columns @('Device', 'OS', 'Compliance', 'Model', 'Last Sync') -Rows $rows
 
-    # Allow drilling into a device
     $deviceChoices = ($devices.value | ForEach-Object { $_.deviceName })
     $deviceChoices += 'Back'
 
@@ -307,7 +304,7 @@ function Show-InTUIUserApps {
         Invoke-InTUIGraphRequest -Uri "/users/$UserId/mobileAppIntentAndStates" -Beta
     }
 
-    if ($null -eq $apps -or ($apps.value | Measure-Object).Count -eq 0) {
+    if (-not $apps.value) {
         Show-InTUIWarning "No app installation data available for this user."
         Read-InTUIKey
         return
@@ -317,13 +314,7 @@ function Show-InTUIUserApps {
         if ($appState.mobileAppList) {
             $rows = @()
             foreach ($app in $appState.mobileAppList) {
-                $installColor = switch ($app.installState) {
-                    'installed'      { 'green' }
-                    'failed'         { 'red' }
-                    'notInstalled'   { 'grey' }
-                    'notApplicable'  { 'grey' }
-                    default          { 'yellow' }
-                }
+                $installColor = Get-InTUIInstallStateColor -State $app.installState
 
                 $rows += , @(
                     $app.displayName,
@@ -362,7 +353,7 @@ function Show-InTUIUserGroups {
         Invoke-InTUIGraphRequest -Uri "/users/$UserId/memberOf?`$select=id,displayName,description,groupTypes,mailEnabled,securityEnabled,membershipRule" -All
     }
 
-    if ($null -eq $groups -or ($groups | Measure-Object).Count -eq 0) {
+    if (-not $groups -or @($groups).Count -eq 0) {
         Show-InTUIWarning "No group memberships found for this user."
         Read-InTUIKey
         return
@@ -416,7 +407,7 @@ function Show-InTUIUserLicenses {
         Invoke-InTUIGraphRequest -Uri "/users/$UserId/licenseDetails"
     }
 
-    if ($null -eq $licenseDetails -or ($licenseDetails.value | Measure-Object).Count -eq 0) {
+    if (-not $licenseDetails.value) {
         Show-InTUIWarning "No licenses assigned to this user."
         Read-InTUIKey
         return
@@ -424,8 +415,8 @@ function Show-InTUIUserLicenses {
 
     $rows = @()
     foreach ($license in $licenseDetails.value) {
-        $enabledPlans = ($license.servicePlans | Where-Object { $_.provisioningStatus -eq 'Success' } | Measure-Object).Count
-        $totalPlans = ($license.servicePlans | Measure-Object).Count
+        $enabledPlans = @($license.servicePlans | Where-Object { $_.provisioningStatus -eq 'Success' }).Count
+        $totalPlans = @($license.servicePlans).Count
 
         $rows += , @(
             $license.skuPartNumber,
