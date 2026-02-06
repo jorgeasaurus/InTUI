@@ -83,19 +83,19 @@ function Show-InTUIDeviceScriptList {
             $scriptChoices += $displayName
         }
 
-        $scriptChoices += '─────────────'
-        $scriptChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $scriptChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($scripts.Count ?? $scripts.Results.Count) -Showing $scripts.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[yellow]Select a script[/]" -Choices $scriptChoices
+        $selection = Show-InTUIMenu -Title "[yellow]Select a script[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $scriptChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $scripts.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $scripts.Results.Count) {
                 Show-InTUIDeviceScriptDetail -ScriptId $scripts.Results[$idx].id
             }
         }
@@ -363,19 +363,19 @@ function Show-InTUIRemediationList {
             $remediationChoices += $displayName
         }
 
-        $remediationChoices += '─────────────'
-        $remediationChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $remediationChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($remediations.Count ?? $remediations.Results.Count) -Showing $remediations.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[yellow]Select a remediation[/]" -Choices $remediationChoices
+        $selection = Show-InTUIMenu -Title "[yellow]Select a remediation[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $remediationChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $remediations.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $remediations.Results.Count) {
                 Show-InTUIRemediationDetail -ScriptId $remediations.Results[$idx].id
             }
         }

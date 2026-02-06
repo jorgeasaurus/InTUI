@@ -163,19 +163,19 @@ function Show-InTUIAppList {
             $appChoices += $displayName
         }
 
-        $appChoices += '─────────────'
-        $appChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $appChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($apps.Count ?? $apps.Results.Count) -Showing $apps.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[green]Select an app[/]" -Choices $appChoices
+        $selection = Show-InTUIMenu -Title "[green]Select an app[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $appChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $apps.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $apps.Results.Count) {
                 Show-InTUIAppDetail -AppId $apps.Results[$idx].id
             }
         }
@@ -476,17 +476,17 @@ function Show-InTUIAppInstallStatusMonitor {
         $appType = Get-InTUIAppTypeFriendlyName -ODataType $app.'@odata.type'
         $choices += "$($app.displayName) [grey]($appType)[/]"
     }
-    $choices += '─────────────'
-    $choices += 'Back'
+    $choiceMap = Get-InTUIChoiceMap -Choices $choices
+    $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-    $selection = Show-InTUIMenu -Title "[green]Select app for status[/]" -Choices $choices
+    $selection = Show-InTUIMenu -Title "[green]Select app for status[/]" -Choices $menuChoices
 
     if ($selection -eq 'Back' -or $selection -eq '─────────────') {
         return
     }
 
-    $idx = $choices.IndexOf($selection)
-    if ($idx -ge 0 -and $idx -lt $apps.Results.Count) {
+    $idx = $choiceMap.IndexMap[$selection]
+    if ($null -ne $idx -and $idx -lt $apps.Results.Count) {
         Show-InTUIAppDeviceStatus -AppId $apps.Results[$idx].id -AppName $apps.Results[$idx].displayName
     }
 }

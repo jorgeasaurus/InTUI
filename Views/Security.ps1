@@ -87,19 +87,19 @@ function Show-InTUISecurityBaselineList {
             $intentChoices += $displayName
         }
 
-        $intentChoices += '─────────────'
-        $intentChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $intentChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($intents.Count ?? $intents.Results.Count) -Showing $intents.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[red]Select a baseline[/]" -Choices $intentChoices
+        $selection = Show-InTUIMenu -Title "[red]Select a baseline[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $intentChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $intents.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $intents.Results.Count) {
                 Show-InTUISecurityBaselineDetail -IntentId $intents.Results[$idx].id
             }
         }
@@ -326,19 +326,19 @@ function Show-InTUIEndpointProtectionList {
             $configChoices += $displayName
         }
 
-        $configChoices += '─────────────'
-        $configChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $configChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total $filteredResults.Count -Showing $filteredResults.Count
 
-        $selection = Show-InTUIMenu -Title "[red]Select a policy[/]" -Choices $configChoices
+        $selection = Show-InTUIMenu -Title "[red]Select a policy[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $configChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $filteredResults.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $filteredResults.Count) {
                 Show-InTUIEndpointProtectionDetail -ConfigId $filteredResults[$idx].id
             }
         }
@@ -555,17 +555,17 @@ function Show-InTUIBitLockerKeys {
             $deviceChoices += "[white]$($device.deviceName)[/] [grey]| $($device.azureADDeviceId ?? 'No Azure AD ID')[/]"
         }
 
-        $deviceChoices += '─────────────'
-        $deviceChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $deviceChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        $selection = Show-InTUIMenu -Title "[red]Select a device[/]" -Choices $deviceChoices
+        $selection = Show-InTUIMenu -Title "[red]Select a device[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             continue
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $deviceChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt @($devices.value).Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt @($devices.value).Count) {
                 $selectedDevice = @($devices.value)[$idx]
 
                 if (-not $selectedDevice.azureADDeviceId) {
@@ -633,14 +633,14 @@ function Show-InTUIBitLockerKeysForDevice {
     foreach ($key in $keys.value) {
         $revealChoices += "Reveal key: $($key.id)"
     }
-    $revealChoices += '─────────────'
-    $revealChoices += 'Back'
+    $choiceMap = Get-InTUIChoiceMap -Choices $revealChoices
+    $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-    $revealSelection = Show-InTUIMenu -Title "[red]Reveal a recovery key?[/]" -Choices $revealChoices
+    $revealSelection = Show-InTUIMenu -Title "[red]Reveal a recovery key?[/]" -Choices $menuChoices
 
     if ($revealSelection -ne 'Back' -and $revealSelection -ne '─────────────') {
-        $revealIdx = $revealChoices.IndexOf($revealSelection)
-        if ($revealIdx -ge 0 -and $revealIdx -lt @($keys.value).Count) {
+        $revealIdx = $choiceMap.IndexMap[$revealSelection]
+        if ($null -ne $revealIdx -and $revealIdx -lt @($keys.value).Count) {
             $selectedKey = @($keys.value)[$revealIdx]
 
             Write-InTUILog -Message "Revealing BitLocker recovery key" -Context @{ KeyId = $selectedKey.id; DeviceName = $DeviceName }

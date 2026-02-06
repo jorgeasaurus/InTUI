@@ -62,8 +62,10 @@ function Invoke-InTUIBulkDeviceAction {
         "$icon $($_.deviceName) [grey]($($_.userPrincipalName ?? 'Unassigned'))[/]"
     }
 
+    $choiceMap = Get-InTUIChoiceMap -Choices $deviceNames
+
     Write-SpectreHost "[blue]Select devices for bulk action (space to select, enter to confirm):[/]"
-    $selected = Read-SpectreMultiSelection -Title "[blue]Select devices[/]" -Choices $deviceNames -PageSize 20
+    $selected = Read-SpectreMultiSelection -Title "[blue]Select devices[/]" -Choices $choiceMap.Choices -PageSize 20
 
     if (-not $selected -or $selected.Count -eq 0) {
         Show-InTUIWarning "No devices selected."
@@ -88,8 +90,8 @@ function Invoke-InTUIBulkDeviceAction {
     # Map selected display names back to device objects
     $selectedDevices = @()
     foreach ($sel in $selected) {
-        $idx = $deviceNames.IndexOf($sel)
-        if ($idx -ge 0) {
+        $idx = $choiceMap.IndexMap[$sel]
+        if ($null -ne $idx) {
             $selectedDevices += $devices.Results[$idx]
         }
     }
@@ -100,24 +102,50 @@ function Invoke-InTUIBulkDeviceAction {
         'Sync Devices' {
             $confirm = Show-InTUIConfirm -Message "[yellow]Sync $($selectedDevices.Count) device(s)?[/]"
             if ($confirm) {
+                $successCount = 0
+                $failedDevices = [System.Collections.Generic.List[string]]::new()
+                
                 Show-InTUILoading -Title "[blue]Syncing $($selectedDevices.Count) devices...[/]" -ScriptBlock {
                     foreach ($device in $selectedDevices) {
-                        Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/syncDevice" -Method POST -Beta
+                        $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/syncDevice" -Method POST -Beta
+                        if ($null -ne $result) {
+                            $successCount++
+                        } else {
+                            $failedDevices.Add($device.deviceName)
+                        }
                     }
                 }
-                Show-InTUISuccess "Sync initiated for $($selectedDevices.Count) device(s)."
+                
+                if ($failedDevices.Count -eq 0) {
+                    Show-InTUISuccess "Sync initiated for $successCount device(s)."
+                } else {
+                    Show-InTUIWarning "Sync: $successCount succeeded, $($failedDevices.Count) failed: $($failedDevices -join ', ')"
+                }
                 Read-InTUIKey
             }
         }
         'Restart Devices' {
             $confirm = Show-InTUIConfirm -Message "[yellow]Restart $($selectedDevices.Count) device(s)?[/]"
             if ($confirm) {
+                $successCount = 0
+                $failedDevices = [System.Collections.Generic.List[string]]::new()
+                
                 Show-InTUILoading -Title "[blue]Restarting $($selectedDevices.Count) devices...[/]" -ScriptBlock {
                     foreach ($device in $selectedDevices) {
-                        Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/rebootNow" -Method POST -Beta
+                        $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/rebootNow" -Method POST -Beta
+                        if ($null -ne $result) {
+                            $successCount++
+                        } else {
+                            $failedDevices.Add($device.deviceName)
+                        }
                     }
                 }
-                Show-InTUISuccess "Restart initiated for $($selectedDevices.Count) device(s)."
+                
+                if ($failedDevices.Count -eq 0) {
+                    Show-InTUISuccess "Restart initiated for $successCount device(s)."
+                } else {
+                    Show-InTUIWarning "Restart: $successCount succeeded, $($failedDevices.Count) failed: $($failedDevices -join ', ')"
+                }
                 Read-InTUIKey
             }
         }
@@ -126,12 +154,25 @@ function Invoke-InTUIBulkDeviceAction {
             if ($confirm) {
                 $confirm2 = Show-InTUIConfirm -Message "[red]Final confirmation: Retire $($selectedDevices.Count) device(s)?[/]"
                 if ($confirm2) {
+                    $successCount = 0
+                    $failedDevices = [System.Collections.Generic.List[string]]::new()
+                    
                     Show-InTUILoading -Title "[red]Retiring $($selectedDevices.Count) devices...[/]" -ScriptBlock {
                         foreach ($device in $selectedDevices) {
-                            Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/retire" -Method POST -Beta
+                            $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/retire" -Method POST -Beta
+                            if ($null -ne $result) {
+                                $successCount++
+                            } else {
+                                $failedDevices.Add($device.deviceName)
+                            }
                         }
                     }
-                    Show-InTUISuccess "Retire initiated for $($selectedDevices.Count) device(s)."
+                    
+                    if ($failedDevices.Count -eq 0) {
+                        Show-InTUISuccess "Retire initiated for $successCount device(s)."
+                    } else {
+                        Show-InTUIWarning "Retire: $successCount succeeded, $($failedDevices.Count) failed: $($failedDevices -join ', ')"
+                    }
                     Read-InTUIKey
                 }
             }

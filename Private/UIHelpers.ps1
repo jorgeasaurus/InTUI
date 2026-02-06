@@ -98,6 +98,37 @@ function Show-InTUIMenu {
     Read-SpectreSelection -Title $Title -Choices $Choices -Color $Color -PageSize $PageSize
 }
 
+function Get-InTUIChoiceMap {
+    <#
+    .SYNOPSIS
+        Ensures menu choices are unique and returns an index map.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Choices
+    )
+
+    $counts = @{}
+    $uniqueChoices = [System.Collections.Generic.List[string]]::new()
+    $indexMap = @{}
+
+    for ($i = 0; $i -lt $Choices.Count; $i++) {
+        $choice = $Choices[$i]
+        if (-not $counts.ContainsKey($choice)) {
+            $counts[$choice] = 0
+        }
+        $counts[$choice]++
+
+        $suffix = if ($counts[$choice] -gt 1) { " [grey](#$($counts[$choice]))[/]" } else { '' }
+        $uniqueChoice = "$choice$suffix"
+        $uniqueChoices.Add($uniqueChoice)
+        $indexMap[$uniqueChoice] = $i
+    }
+
+    return @{ Choices = $uniqueChoices.ToArray(); IndexMap = $indexMap }
+}
+
 function Show-InTUIConfirm {
     <#
     .SYNOPSIS

@@ -220,7 +220,13 @@ function Get-InTUIPagedResults {
         [string]$OrderBy,
 
         [Parameter()]
-        [string]$Expand
+        [string]$Expand,
+
+        [Parameter()]
+        [hashtable]$Headers,
+
+        [Parameter()]
+        [switch]$IncludeCount
     )
 
     $queryParams = @()
@@ -243,6 +249,9 @@ function Get-InTUIPagedResults {
     if ($Expand) {
         $queryParams += "`$expand=$Expand"
     }
+    if ($IncludeCount) {
+        $queryParams += "`$count=true"
+    }
 
     $fullUri = $Uri
     if ($queryParams.Count -gt 0) {
@@ -251,6 +260,7 @@ function Get-InTUIPagedResults {
 
     $params = @{ Uri = $fullUri }
     if ($Beta) { $params['Beta'] = $true }
+    if ($Headers) { $params['Headers'] = $Headers }
 
     $response = Invoke-InTUIGraphRequest @params
 

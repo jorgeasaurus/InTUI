@@ -82,9 +82,18 @@ function Show-InTUIUserList {
             OrderBy  = 'displayName'
         }
 
+        $filters = @()
         if ($SearchTerm) {
             $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
-            $params['Filter'] = "startswith(displayName,'$safe') or startswith(userPrincipalName,'$safe') or startswith(mail,'$safe')"
+            $filters += "(startswith(displayName,'$safe') or startswith(userPrincipalName,'$safe') or startswith(mail,'$safe'))"
+        }
+        if ($LicensedOnly) {
+            $filters += 'assignedLicenses/$count ne 0'
+            $params['Headers'] = @{ ConsistencyLevel = 'eventual' }
+            $params['IncludeCount'] = $true
+        }
+        if ($filters.Count -gt 0) {
+            $params['Filter'] = $filters -join ' and '
         }
 
         $users = Show-InTUILoading -Title "[yellow]Loading users...[/]" -ScriptBlock {
@@ -99,15 +108,6 @@ function Show-InTUIUserList {
         }
 
         $filteredUsers = $users.Results
-        if ($LicensedOnly) {
-            $filteredUsers = $users.Results | Where-Object { $_.assignedLicenses.Count -gt 0 }
-            if ($filteredUsers.Count -eq 0) {
-                Show-InTUIWarning "No licensed users found in this page."
-                Read-InTUIKey
-                $exitList = $true
-                continue
-            }
-        }
 
         $userChoices = @()
         foreach ($user in $filteredUsers) {
@@ -119,19 +119,19 @@ function Show-InTUIUserList {
             $userChoices += $displayName
         }
 
-        $userChoices += '─────────────'
-        $userChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $userChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($users.Count ?? $filteredUsers.Count) -Showing $filteredUsers.Count -FilterText $SearchTerm
 
-        $selection = Show-InTUIMenu -Title "[yellow]Select a user[/]" -Choices $userChoices
+        $selection = Show-InTUIMenu -Title "[yellow]Select a user[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $userChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $filteredUsers.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $filteredUsers.Count) {
                 Show-InTUIUserDetail -UserId $filteredUsers[$idx].id
             }
         }

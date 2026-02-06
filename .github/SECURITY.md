@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a vulnerability in IntuneHydrationKit, please follow the process:
+If you discover a vulnerability in InTUI, please follow the process:
 
 1. Go to the **Security** tab in the GitHub repository and click **"Report a vulnerability"** to create a private security advisory.
    - This ensures all communication remains private from the start.

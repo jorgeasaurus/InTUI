@@ -166,19 +166,19 @@ function Show-InTUIGroupList {
             $groupChoices += $displayName
         }
 
-        $groupChoices += '─────────────'
-        $groupChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $groupChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($groups.Count ?? $groups.Results.Count) -Showing $groups.Results.Count -FilterText ($TypeFilter ?? $SearchTerm)
 
-        $selection = Show-InTUIMenu -Title "[magenta]Select a group[/]" -Choices $groupChoices
+        $selection = Show-InTUIMenu -Title "[magenta]Select a group[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $groupChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $groups.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $groups.Results.Count) {
                 Show-InTUIGroupDetail -GroupId $groups.Results[$idx].id
             }
         }

@@ -70,7 +70,7 @@ function Export-InTUIData {
 
     Write-InTUILog -Message "Non-interactive export" -Context @{ Type = $Type; Format = $Format; Filter = $Filter }
 
-    $allResults = @()
+    $allResults = [System.Collections.Generic.List[object]]::new()
     $response = Get-InTUIPagedResults @params -PageSize 999
 
     if ($null -eq $response -or $response.Results.Count -eq 0) {
@@ -78,7 +78,23 @@ function Export-InTUIData {
         return
     }
 
-    $allResults = $response.Results
+    if ($response.Results) {
+        $allResults.AddRange(@($response.Results))
+    }
+
+    $nextLink = $response.NextLink
+    while ($nextLink) {
+        $nextResponse = Invoke-InTUIGraphRequest -Uri $nextLink -Method GET
+        if (-not $nextResponse) {
+            break
+        }
+        if ($nextResponse -and $nextResponse.value) {
+            $allResults.AddRange(@($nextResponse.value))
+        }
+        $nextLink = $nextResponse.'@odata.nextLink'
+    }
+
+    $allResults = @($allResults)
 
     switch ($Format) {
         'PSObject' {

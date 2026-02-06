@@ -92,19 +92,19 @@ function Show-InTUIConditionalAccessPolicyList {
             $policyChoices += $displayName
         }
 
-        $policyChoices += '─────────────'
-        $policyChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $policyChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($policies.Count ?? $policies.Results.Count) -Showing $policies.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[DeepSkyBlue1]Select a policy[/]" -Choices $policyChoices
+        $selection = Show-InTUIMenu -Title "[DeepSkyBlue1]Select a policy[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $policyChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $policies.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $policies.Results.Count) {
                 Show-InTUIConditionalAccessPolicyDetail -PolicyId $policies.Results[$idx].id
             }
         }
@@ -346,19 +346,19 @@ function Show-InTUINamedLocationList {
             $locationChoices += $displayName
         }
 
-        $locationChoices += '─────────────'
-        $locationChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $locationChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($locations.Count ?? $locations.Results.Count) -Showing $locations.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[DeepSkyBlue1]Select a named location[/]" -Choices $locationChoices
+        $selection = Show-InTUIMenu -Title "[DeepSkyBlue1]Select a named location[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $locationChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $locations.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $locations.Results.Count) {
                 Show-InTUINamedLocationDetail -LocationId $locations.Results[$idx].id
             }
         }

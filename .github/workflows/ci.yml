@@ -37,37 +37,40 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Bootstrap Build Environment
+      - name: Install Dependencies
         shell: pwsh
-        run: ./build.ps1
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          Install-Module -Name Pester -Force -Scope CurrentUser -MinimumVersion 5.0.0
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
-        run: ./build.ps1 -Task Analyze
+        run: |
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse -ExcludeRule PSAvoidUsingWriteHost
+          $results | Format-Table -AutoSize
+          if ($results | Where-Object { $_.Severity -eq 'Error' }) {
+            throw "PSScriptAnalyzer found errors"
+          }
 
       - name: Run Pester Tests
         shell: pwsh
-        run: ./build.ps1 -Task Test
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Tests'
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'TestResults.xml'
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          Invoke-Pester -Configuration $config
 
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}
-          path: build/TestResults/TestResults.xml
+          path: TestResults.xml
           if-no-files-found: warn
-
-      - name: Build Module
-        shell: pwsh
-        run: ./build.ps1 -Task Build
-
-      - name: Upload Build Artifacts
-        if: success() && matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: module-build
-          path: build/IntuneHydrationKit/
-          if-no-files-found: error
 
   release:
     name: Publish and Release
@@ -79,40 +82,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: module-build
-          path: build/IntuneHydrationKit/
-
-      - name: List Build Artifacts
-        shell: pwsh
-        run: |
-          Write-Host "=== Build Artifacts ===" -ForegroundColor Cyan
-          if (Test-Path build/IntuneHydrationKit) {
-            Get-ChildItem -Path build/IntuneHydrationKit -Recurse | ForEach-Object {
-              Write-Host $_.FullName
-            }
-          } else {
-            Write-Error "Build artifacts directory not found!"
-            exit 1
-          }
-
       - name: Get Module Info
         id: module_info
         shell: pwsh
         run: |
-          $manifest = Import-PowerShellDataFile -Path ./IntuneHydrationKit.psd1
+          $manifest = Import-PowerShellDataFile -Path ./InTUI.psd1
           "version=$($manifest.ModuleVersion)" >> $env:GITHUB_OUTPUT
-          # Use heredoc-style multiline output for proper newline handling
           "release_notes<<EOF" >> $env:GITHUB_OUTPUT
-          $manifest.PrivateData.PSData.ReleaseNotes >> $env:GITHUB_OUTPUT
+          if ($manifest.PrivateData.PSData.ReleaseNotes) {
+            $manifest.PrivateData.PSData.ReleaseNotes >> $env:GITHUB_OUTPUT
+          } else {
+            "See commits for changes." >> $env:GITHUB_OUTPUT
+          }
           "EOF" >> $env:GITHUB_OUTPUT
 
       - name: Validate Tag Matches Module Version
         shell: pwsh
         run: |
-          $manifest = Import-PowerShellDataFile -Path ./IntuneHydrationKit.psd1
+          $manifest = Import-PowerShellDataFile -Path ./InTUI.psd1
           $moduleVersion = $manifest.ModuleVersion
           $tagVersion = '${{ github.ref_name }}' -replace '^v', ''
           if ($moduleVersion -ne $tagVersion) {
@@ -128,28 +115,36 @@ jobs:
           if (-not $env:PSGALLERY_API_KEY) {
             throw "PSGALLERY_API_KEY secret is not set"
           }
-          Publish-Module -Path ./build/IntuneHydrationKit -NuGetApiKey $env:PSGALLERY_API_KEY -Repository PSGallery -Force
+          Publish-Module -Path . -NuGetApiKey $env:PSGALLERY_API_KEY -Repository PSGallery -Force
 
       - name: Create Release Archive
         shell: pwsh
         run: |
           $version = '${{ steps.module_info.outputs.version }}'
-          $zipName = "IntuneHydrationKit-v$version.zip"
-          Compress-Archive -Path ./build/IntuneHydrationKit/* -DestinationPath "./build/$zipName" -Force
+          $zipName = "InTUI-v$version.zip"
+          $filesToInclude = @(
+            'InTUI.psd1',
+            'InTUI.psm1',
+            'Public',
+            'Private',
+            'Views',
+            'CommandMappings.ps1',
+            'Start-InTUI.ps1'
+          )
+          Compress-Archive -Path $filesToInclude -DestinationPath "./$zipName" -Force
           Write-Host "Created release archive: $zipName"
-          Get-ChildItem ./build/*.zip | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1KB, 2)) KB" }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631
         with:
           name: v${{ steps.module_info.outputs.version }}
           body: |
-            ## IntuneHydrationKit v${{ steps.module_info.outputs.version }}
+            ## InTUI v${{ steps.module_info.outputs.version }}
 
             ### Installation
 
             ```powershell
-            Install-Module -Name IntuneHydrationKit -Scope CurrentUser
+            Install-Module -Name InTUI -Scope CurrentUser
             ```
 
             ### Release Notes
@@ -157,6 +152,6 @@ jobs:
             ${{ steps.module_info.outputs.release_notes }}
           draft: false
           prerelease: false
-          files: build/IntuneHydrationKit-v${{ steps.module_info.outputs.version }}.zip
+          files: InTUI-v${{ steps.module_info.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

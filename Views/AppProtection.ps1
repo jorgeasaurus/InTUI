@@ -105,19 +105,19 @@ function Show-InTUIAppProtectionPolicyList {
             $policyChoices += $displayName
         }
 
-        $policyChoices += '─────────────'
-        $policyChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $policyChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($policies.Count ?? $policies.Results.Count) -Showing $policies.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[green]Select a policy[/]" -Choices $policyChoices
+        $selection = Show-InTUIMenu -Title "[green]Select a policy[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $policyChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $policies.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $policies.Results.Count) {
                 Show-InTUIAppProtectionPolicyDetail -PolicyId $policies.Results[$idx].id -Platform $Platform
             }
         }
@@ -317,19 +317,19 @@ function Show-InTUIVppTokenList {
             $tokenChoices += $displayName
         }
 
-        $tokenChoices += '─────────────'
-        $tokenChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $tokenChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($tokens.Count ?? $tokens.Results.Count) -Showing $tokens.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[green]Select a VPP token[/]" -Choices $tokenChoices
+        $selection = Show-InTUIMenu -Title "[green]Select a VPP token[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $tokenChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $tokens.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $tokens.Results.Count) {
                 Show-InTUIVppTokenDetail -TokenId $tokens.Results[$idx].id
             }
         }

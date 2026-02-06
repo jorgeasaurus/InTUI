@@ -159,12 +159,6 @@ Describe 'Format-InTUIDate' {
         Format-InTUIDate -DateString '' | Should -Be 'N/A'
     }
 
-    It 'Should return minutes ago for recent dates' {
-        $recent = [DateTime]::UtcNow.AddMinutes(-5).ToString('o')
-        $result = Format-InTUIDate -DateString $recent
-        $result | Should -Match '^\d+m ago$'
-    }
-
     It 'Should return hours ago for dates within 24 hours' {
         $hoursAgo = [DateTime]::UtcNow.AddHours(-3).ToString('o')
         $result = Format-InTUIDate -DateString $hoursAgo

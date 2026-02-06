@@ -41,7 +41,7 @@ $Global:intuneCommandMappings = [ordered]@{
         '-------'                   = '/beta/deviceAppManagement/mobileApps'
         'App Configuration'         = '/beta/deviceAppManagement/mobileAppConfigurations'
         'Managed App Configuration' = '/beta/deviceAppManagement/targetedManagedAppConfigurations'
-        'App Protection Policies'   = '/beta//deviceAppManagement/managedAppPolicies'
+        'App Protection Policies'   = '/beta/deviceAppManagement/managedAppPolicies'
         'App Categories'            = '/beta/deviceAppManagement/mobileAppCategories'
         'Discovered Apps'           = '/beta/deviceManagement/detectedApps'
     }

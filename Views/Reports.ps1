@@ -146,19 +146,19 @@ function Show-InTUIAppInstallFailures {
             $appChoices += "[white]$($app.displayName)[/] [grey]| $appType[/]"
         }
 
-        $appChoices += '─────────────'
-        $appChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $appChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($apps.Count ?? $apps.Results.Count) -Showing $apps.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[DarkOrange]Select an app to check failures[/]" -Choices $appChoices
+        $selection = Show-InTUIMenu -Title "[DarkOrange]Select an app to check failures[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitReport = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $appChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $apps.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $apps.Results.Count) {
                 $selectedApp = $apps.Results[$idx]
                 Show-InTUIAppFailureDetail -AppId $selectedApp.id -AppName $selectedApp.displayName
             }

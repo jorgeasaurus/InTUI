@@ -92,19 +92,19 @@ function Show-InTUIAutopilotDeviceList {
             $deviceChoices += $displayName
         }
 
-        $deviceChoices += '─────────────'
-        $deviceChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $deviceChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($devices.Count ?? $devices.Results.Count) -Showing $devices.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[steelblue1_1]Select an Autopilot device[/]" -Choices $deviceChoices
+        $selection = Show-InTUIMenu -Title "[steelblue1_1]Select an Autopilot device[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $deviceChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $devices.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $devices.Results.Count) {
                 Show-InTUIAutopilotDeviceDetail -DeviceId $devices.Results[$idx].id
             }
         }
@@ -220,19 +220,19 @@ function Show-InTUIAutopilotProfileList {
             $profileChoices += $displayName
         }
 
-        $profileChoices += '─────────────'
-        $profileChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $profileChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($profiles.Count ?? $profiles.Results.Count) -Showing $profiles.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[steelblue1_1]Select a profile[/]" -Choices $profileChoices
+        $selection = Show-InTUIMenu -Title "[steelblue1_1]Select a profile[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $profileChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $profiles.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $profiles.Results.Count) {
                 Show-InTUIAutopilotProfileDetail -ProfileId $profiles.Results[$idx].id
             }
         }
@@ -404,19 +404,19 @@ function Show-InTUIEnrollmentConfigList {
             $configChoices += $displayName
         }
 
-        $configChoices += '─────────────'
-        $configChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $configChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($configs.Count ?? $configs.Results.Count) -Showing $configs.Results.Count
 
-        $selection = Show-InTUIMenu -Title "[steelblue1_1]Select a configuration[/]" -Choices $configChoices
+        $selection = Show-InTUIMenu -Title "[steelblue1_1]Select a configuration[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $configChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $configs.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $configs.Results.Count) {
                 Show-InTUIEnrollmentConfigDetail -ConfigId $configs.Results[$idx].id
             }
         }

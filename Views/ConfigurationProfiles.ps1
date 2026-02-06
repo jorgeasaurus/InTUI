@@ -204,19 +204,19 @@ function Show-InTUIConfigProfileList {
             $profileChoices += $displayName
         }
 
-        $profileChoices += '─────────────'
-        $profileChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $profileChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total $filteredResults.Count -Showing $filteredResults.Count -FilterText ($PlatformFilter ?? $SearchTerm)
 
-        $selection = Show-InTUIMenu -Title "[cyan]Select a profile[/]" -Choices $profileChoices
+        $selection = Show-InTUIMenu -Title "[cyan]Select a profile[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $profileChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $filteredResults.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $filteredResults.Count) {
                 $selected = $filteredResults[$idx]
                 if ($selected.Source -eq 'Catalog') {
                     Show-InTUICatalogProfileDetail -ProfileId $selected.Id

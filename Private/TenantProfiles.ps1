@@ -124,11 +124,10 @@ function Show-InTUITenantSwitcher {
         $choices += "$($profile.Label) [grey]| $envLabel | $($profile.Account) | Last: $($profile.LastUsed)[/]$current"
     }
 
-    $choices += '─────────────'
-    $choices += 'Save Current Tenant'
-    $choices += 'Back'
+    $choiceMap = Get-InTUIChoiceMap -Choices $choices
+    $menuChoices = @($choiceMap.Choices + '─────────────' + 'Save Current Tenant' + 'Back')
 
-    $selection = Show-InTUIMenu -Title "[blue]Tenant Profiles[/]" -Choices $choices
+    $selection = Show-InTUIMenu -Title "[blue]Tenant Profiles[/]" -Choices $menuChoices
 
     if ($selection -eq 'Back') { return }
 
@@ -138,8 +137,8 @@ function Show-InTUITenantSwitcher {
         return
     }
 
-    $idx = $choices.IndexOf($selection)
-    if ($idx -ge 0 -and $idx -lt $profiles.Count) {
+    $idx = $choiceMap.IndexMap[$selection]
+    if ($null -ne $idx -and $idx -lt $profiles.Count) {
         $selected = $profiles[$idx]
 
         if ($selected.TenantId -eq $script:TenantId -and $selected.Environment -eq $script:CloudEnvironment) {

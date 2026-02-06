@@ -147,19 +147,19 @@ function Show-InTUIDeviceList {
             $deviceChoices += $displayName
         }
 
-        $deviceChoices += '─────────────'
-        $deviceChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $deviceChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total ($devices.Count ?? $devices.Results.Count) -Showing $devices.Results.Count -FilterText ($OSFilter ?? $SearchTerm)
 
-        $selection = Show-InTUIMenu -Title "[blue]Select a device[/]" -Choices $deviceChoices
+        $selection = Show-InTUIMenu -Title "[blue]Select a device[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $deviceChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $devices.Results.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $devices.Results.Count) {
                 Show-InTUIDeviceDetail -DeviceId $devices.Results[$idx].id
             }
         }
@@ -325,8 +325,13 @@ function Invoke-InTUIDeviceAction {
         Invoke-InTUIGraphRequest @params
     }
 
-    Write-InTUILog -Message "Device action completed" -Context @{ DeviceId = $DeviceId; Action = $Action }
-    Show-InTUISuccess "Action '$Action' has been initiated."
+    if ($null -eq $result) {
+        Write-InTUILog -Message "Device action failed" -Context @{ DeviceId = $DeviceId; Action = $Action } -Level 'ERROR'
+        Show-InTUIError "Action '$Action' failed. Check logs for details."
+    } else {
+        Write-InTUILog -Message "Device action completed" -Context @{ DeviceId = $DeviceId; Action = $Action }
+        Show-InTUISuccess "Action '$Action' has been initiated."
+    }
     Read-InTUIKey
 }
 

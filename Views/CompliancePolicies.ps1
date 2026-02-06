@@ -135,19 +135,19 @@ function Show-InTUICompliancePolicyList {
             $policyChoices += $displayName
         }
 
-        $policyChoices += '─────────────'
-        $policyChoices += 'Back'
+        $choiceMap = Get-InTUIChoiceMap -Choices $policyChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
         Show-InTUIStatusBar -Total $filteredResults.Count -Showing $filteredResults.Count -FilterText ($PlatformFilter ?? $SearchTerm)
 
-        $selection = Show-InTUIMenu -Title "[magenta1]Select a policy[/]" -Choices $policyChoices
+        $selection = Show-InTUIMenu -Title "[magenta1]Select a policy[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
         }
         elseif ($selection -ne '─────────────') {
-            $idx = $policyChoices.IndexOf($selection)
-            if ($idx -ge 0 -and $idx -lt $filteredResults.Count) {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $filteredResults.Count) {
                 Show-InTUICompliancePolicyDetail -PolicyId $filteredResults[$idx].id
             }
         }

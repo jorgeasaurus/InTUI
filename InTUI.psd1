@@ -17,7 +17,7 @@
     PrivateData       = @{
         PSData = @{
             Tags       = @('Intune', 'Graph', 'TUI', 'Spectre', 'Console')
-            ProjectUri = 'https://github.com/InTUI/InTUI'
+            ProjectUri = 'https://github.com/jorgeasaurus/InTUI'
         }
     }
 }

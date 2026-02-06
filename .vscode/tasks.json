@@ -2,70 +2,16 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Bootstrap: Install Dependencies",
+            "label": "Test: Run Pester Tests",
             "type": "shell",
             "command": "pwsh",
             "args": [
                 "-NoProfile",
-                "-File",
-                "${workspaceFolder}/build.ps1"
-            ],
-            "group": "build",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Build: Analyze (PSScriptAnalyzer)",
-            "type": "shell",
-            "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-File",
-                "${workspaceFolder}/build.ps1",
-                "-Task",
-                "Analyze"
-            ],
-            "group": "build",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Build: Test (Pester)",
-            "type": "shell",
-            "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-File",
-                "${workspaceFolder}/build.ps1",
-                "-Task",
-                "Test"
-            ],
-            "group": "test",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Build: Build Module",
-            "type": "shell",
-            "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-File",
-                "${workspaceFolder}/build.ps1",
-                "-Task",
-                "Build"
+                "-Command",
+                "Invoke-Pester -Path '${workspaceFolder}/Tests' -Output Detailed"
             ],
             "group": {
-                "kind": "build",
+                "kind": "test",
                 "isDefault": true
             },
             "presentation": {
@@ -75,31 +21,13 @@
             "problemMatcher": []
         },
         {
-            "label": "Build: Full CI (Analyze + Test + Build)",
-            "type": "shell",
-            "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-File",
-                "${workspaceFolder}/build.ps1",
-                "-Task",
-                "CI"
-            ],
-            "group": "build",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Build: Clean",
+            "label": "Analyze: PSScriptAnalyzer",
             "type": "shell",
             "command": "pwsh",
             "args": [
                 "-NoProfile",
                 "-Command",
-                "Import-Module InvokeBuild -Force; Invoke-Build -File ./IntuneHydrationKit.build.ps1 -Task Clean"
+                "Invoke-ScriptAnalyzer -Path '${workspaceFolder}' -Recurse -ExcludeRule PSAvoidUsingWriteHost"
             ],
             "group": "build",
             "presentation": {
@@ -115,23 +43,7 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "Import-Module \"${workspaceFolder}/IntuneHydrationKit.psd1\" -Force -Verbose"
-            ],
-            "group": "none",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Module: Get ReleaseNotes",
-            "type": "shell",
-            "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "Import-Module InvokeBuild -Force; Invoke-Build -File ./IntuneHydrationKit.build.ps1 -Task GetReleaseNotes"
+                "Import-Module '${workspaceFolder}/InTUI.psd1' -Force -Verbose"
             ],
             "group": "none",
             "presentation": {
@@ -147,7 +59,7 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "(Import-PowerShellDataFile ./IntuneHydrationKit.psd1).ModuleVersion"
+                "(Import-PowerShellDataFile '${workspaceFolder}/InTUI.psd1').ModuleVersion"
             ],
             "group": "none",
             "presentation": {
@@ -157,13 +69,13 @@
             "problemMatcher": []
         },
         {
-            "label": "Format: All PowerShell Files",
+            "label": "Run: Start InTUI",
             "type": "shell",
             "command": "pwsh",
             "args": [
                 "-NoProfile",
-                "-File",
-                "${workspaceFolder}/scripts/Format-AllFiles.ps1"
+                "-Command",
+                "Import-Module '${workspaceFolder}/InTUI.psd1' -Force; Start-InTUI"
             ],
             "group": "none",
             "presentation": {
