@@ -45,7 +45,7 @@ function Show-InTUICompliancePoliciesView {
                 Show-InTUICompliancePolicyList -PlatformFilter 'Android'
             }
             'Search Policies' {
-                $searchTerm = Read-SpectreText -Prompt "[magenta1]Search policies by name[/]"
+                $searchTerm = Read-SpectreText -Message "[magenta1]Search policies by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching compliance policies" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUICompliancePolicyList -SearchTerm $searchTerm
@@ -131,7 +131,7 @@ function Show-InTUICompliancePolicyList {
             $typeInfo = Get-InTUICompliancePolicyType -ODataType $policy.'@odata.type'
             $modified = Format-InTUIDate -DateString $policy.lastModifiedDateTime
 
-            $displayName = "[white]$($policy.displayName)[/] [grey]| $($typeInfo.FriendlyName) | $($typeInfo.Platform) | $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $policy.displayName)[/] [grey]| $($typeInfo.FriendlyName) | $($typeInfo.Platform) | $modified[/]"
             $policyChoices += $displayName
         }
 
@@ -228,7 +228,7 @@ function Show-InTUICompliancePolicyDetail {
 
         # Panel 1: Policy Properties
         $propsContent = @"
-[bold white]$($policy.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $policy.displayName)[/]
 
 [grey]Type:[/]              $($typeInfo.FriendlyName)
 [grey]Platform:[/]          $($typeInfo.Platform)

@@ -69,7 +69,7 @@ function Show-InTUIGroupsView {
                 Show-InTUIGroupList -TypeFilter 'Dynamic'
             }
             'Search Groups' {
-                $searchTerm = Read-SpectreText -Prompt "[magenta]Search groups by name[/]"
+                $searchTerm = Read-SpectreText -Message "[magenta]Search groups by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching groups" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIGroupList -SearchTerm $searchTerm
@@ -162,7 +162,7 @@ function Show-InTUIGroupList {
             }
             else { 'No description' }
 
-            $displayName = "$groupType [white]$($group.displayName)[/] [grey]| $desc[/]"
+            $displayName = "$groupType [white]$(ConvertTo-InTUISafeMarkup -Text $group.displayName)[/] [grey]| $desc[/]"
             $groupChoices += $displayName
         }
 
@@ -218,7 +218,7 @@ function Show-InTUIGroupDetail {
         $isDynamic = $group.groupTypes -contains 'DynamicMembership'
 
         $propsContent = @"
-[bold white]$($group.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $group.displayName)[/]
 
 [grey]Type:[/]                      $groupType
 [grey]Description:[/]               $($group.description ?? 'N/A')
@@ -437,7 +437,7 @@ function Show-InTUIGroupDeviceMembers {
         $icon = Get-InTUIDeviceIcon -OperatingSystem $device.operatingSystem
 
         $rows += , @(
-            "$icon $($device.displayName)",
+            "$icon $(ConvertTo-InTUISafeMarkup -Text $device.displayName)",
             ($device.operatingSystem ?? 'N/A'),
             ($device.operatingSystemVersion ?? 'N/A'),
             ($device.trustType ?? 'N/A'),

@@ -79,7 +79,7 @@ function Show-InTUIDeviceScriptList {
             $modified = Format-InTUIDate -DateString $script.lastModifiedDateTime
             $runAs = if ($script.runAsAccount -eq 'system') { 'System' } else { 'User' }
 
-            $displayName = "[white]$($script.displayName)[/] [grey]| $($script.fileName) | $runAs | $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $script.displayName)[/] [grey]| $($script.fileName) | $runAs | $modified[/]"
             $scriptChoices += $displayName
         }
 
@@ -146,7 +146,7 @@ function Show-InTUIDeviceScriptDetail {
         $runAs = if ($scriptObj.runAsAccount -eq 'system') { 'System' } else { 'User' }
 
         $propsContent = @"
-[bold white]$($scriptObj.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $scriptObj.displayName)[/]
 
 [grey]Description:[/]             $(if ($scriptObj.description) { $scriptObj.description.Substring(0, [Math]::Min(200, $scriptObj.description.Length)) } else { 'N/A' })
 [grey]File Name:[/]               $($scriptObj.fileName ?? 'N/A')
@@ -359,7 +359,7 @@ function Show-InTUIRemediationList {
             $publisher = if ($remediation.publisher) { $remediation.publisher } else { 'N/A' }
             $globalScript = if ($remediation.isGlobalScript) { 'Yes' } else { 'No' }
 
-            $displayName = "[white]$($remediation.displayName)[/] [grey]| $publisher | Global: $globalScript | $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $remediation.displayName)[/] [grey]| $publisher | Global: $globalScript | $modified[/]"
             $remediationChoices += $displayName
         }
 
@@ -426,7 +426,7 @@ function Show-InTUIRemediationDetail {
         $runAs = if ($remediation.runAsAccount -eq 'system') { 'System' } else { 'User' }
 
         $propsContent = @"
-[bold white]$($remediation.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $remediation.displayName)[/]
 
 [grey]Description:[/]       $(if ($remediation.description) { $remediation.description.Substring(0, [Math]::Min(200, $remediation.description.Length)) } else { 'N/A' })
 [grey]Publisher:[/]         $($remediation.publisher ?? 'N/A')

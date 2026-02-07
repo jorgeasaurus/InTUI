@@ -4,6 +4,8 @@ $script:InTUIConfig = @{
     PageSize        = 50
     RefreshInterval = 30
     DefaultExportPath = $PWD
+    CacheEnabled    = $true
+    CacheTTL        = 300
 }
 
 function Initialize-InTUIConfig {
@@ -20,6 +22,8 @@ function Initialize-InTUIConfig {
             if ($saved.PageSize) { $script:InTUIConfig.PageSize = $saved.PageSize; $script:PageSize = $saved.PageSize }
             if ($saved.RefreshInterval) { $script:InTUIConfig.RefreshInterval = $saved.RefreshInterval }
             if ($saved.DefaultExportPath) { $script:InTUIConfig.DefaultExportPath = $saved.DefaultExportPath }
+            if ($null -ne $saved.CacheEnabled) { $script:InTUIConfig.CacheEnabled = $saved.CacheEnabled; $script:CacheEnabled = $saved.CacheEnabled }
+            if ($saved.CacheTTL) { $script:InTUIConfig.CacheTTL = $saved.CacheTTL; $script:CacheTTL = $saved.CacheTTL }
             Write-InTUILog -Message "Configuration loaded" -Context @{ Path = $script:ConfigPath }
         }
         catch {
@@ -37,7 +41,7 @@ function Save-InTUIConfig {
     param()
 
     try {
-        $script:InTUIConfig | ConvertTo-Json -Depth 3 | Set-Content $script:ConfigPath -Encoding UTF8
+        $script:InTUIConfig | ConvertTo-Json -Depth 10 | Set-Content $script:ConfigPath -Encoding UTF8
         Write-InTUILog -Message "Configuration saved" -Context @{ Path = $script:ConfigPath }
     }
     catch {
@@ -64,6 +68,8 @@ function Show-InTUISettings {
 [grey]Page Size:[/]          [white]$($script:InTUIConfig.PageSize)[/]
 [grey]Refresh Interval:[/]   [white]$($script:InTUIConfig.RefreshInterval)s[/]
 [grey]Default Export Path:[/] [white]$($script:InTUIConfig.DefaultExportPath)[/]
+[grey]Cache Enabled:[/]      [white]$($script:CacheEnabled)[/]
+[grey]Cache TTL:[/]          [white]$($script:CacheTTL)s[/]
 [grey]Config File:[/]        [white]$($script:ConfigPath)[/]
 "@
 
@@ -73,6 +79,10 @@ function Show-InTUISettings {
             'Change Page Size',
             'Change Refresh Interval',
             'Change Default Export Path',
+            'Toggle Cache',
+            'Change Cache TTL',
+            'Clear Cache',
+            'View Cache Stats',
             'Reset to Defaults',
             '─────────────',
             'Back'
@@ -84,7 +94,7 @@ function Show-InTUISettings {
 
         switch ($selection) {
             'Change Page Size' {
-                $newSize = Read-SpectreText -Prompt "[blue]Page size (10-100)[/]" -DefaultValue "$($script:InTUIConfig.PageSize)"
+                $newSize = Read-SpectreText -Message "[blue]Page size (10-100)[/]" -DefaultAnswer "$($script:InTUIConfig.PageSize)"
                 $parsed = 0
                 if ([int]::TryParse($newSize, [ref]$parsed) -and $parsed -ge 10 -and $parsed -le 100) {
                     $script:InTUIConfig.PageSize = $parsed
@@ -98,7 +108,7 @@ function Show-InTUISettings {
                 Read-InTUIKey
             }
             'Change Refresh Interval' {
-                $newInterval = Read-SpectreText -Prompt "[blue]Refresh interval in seconds (10-300)[/]" -DefaultValue "$($script:InTUIConfig.RefreshInterval)"
+                $newInterval = Read-SpectreText -Message "[blue]Refresh interval in seconds (10-300)[/]" -DefaultAnswer "$($script:InTUIConfig.RefreshInterval)"
                 $parsed = 0
                 if ([int]::TryParse($newInterval, [ref]$parsed) -and $parsed -ge 10 -and $parsed -le 300) {
                     $script:InTUIConfig.RefreshInterval = $parsed
@@ -111,7 +121,7 @@ function Show-InTUISettings {
                 Read-InTUIKey
             }
             'Change Default Export Path' {
-                $newPath = Read-SpectreText -Prompt "[blue]Default export path[/]" -DefaultValue "$($script:InTUIConfig.DefaultExportPath)"
+                $newPath = Read-SpectreText -Message "[blue]Default export path[/]" -DefaultAnswer "$($script:InTUIConfig.DefaultExportPath)"
                 if (Test-Path $newPath -PathType Container) {
                     $script:InTUIConfig.DefaultExportPath = $newPath
                     Save-InTUIConfig
@@ -122,6 +132,49 @@ function Show-InTUISettings {
                 }
                 Read-InTUIKey
             }
+            'Toggle Cache' {
+                $script:CacheEnabled = -not $script:CacheEnabled
+                $script:InTUIConfig.CacheEnabled = $script:CacheEnabled
+                Save-InTUIConfig
+                $status = if ($script:CacheEnabled) { 'enabled' } else { 'disabled' }
+                Show-InTUISuccess "Cache $status"
+                Read-InTUIKey
+            }
+            'Change Cache TTL' {
+                $newTTL = Read-SpectreText -Message "[blue]Cache TTL in seconds (60-3600)[/]" -DefaultAnswer "$($script:CacheTTL)"
+                $parsed = 0
+                if ([int]::TryParse($newTTL, [ref]$parsed) -and $parsed -ge 60 -and $parsed -le 3600) {
+                    $script:CacheTTL = $parsed
+                    $script:InTUIConfig.CacheTTL = $parsed
+                    Save-InTUIConfig
+                    Show-InTUISuccess "Cache TTL set to ${parsed}s"
+                }
+                else {
+                    Show-InTUIWarning "Invalid value. Must be between 60 and 3600."
+                }
+                Read-InTUIKey
+            }
+            'Clear Cache' {
+                $confirm = Show-InTUIConfirm -Message "[yellow]Clear all cached data?[/]"
+                if ($confirm) {
+                    $count = Clear-InTUICache
+                    Show-InTUISuccess "Cleared $count cached entries."
+                }
+                Read-InTUIKey
+            }
+            'View Cache Stats' {
+                $stats = Get-InTUICacheStats
+                $content = @"
+[grey]Cache Enabled:[/]   [white]$($stats.Enabled)[/]
+[grey]Cache TTL:[/]       [white]$($stats.TTL)s[/]
+[grey]Total Entries:[/]   [white]$($stats.EntryCount)[/]
+[grey]Valid Entries:[/]   [green]$($stats.ValidCount)[/]
+[grey]Expired Entries:[/] [yellow]$($stats.ExpiredCount)[/]
+[grey]Total Size:[/]      [white]$([math]::Round($stats.TotalSize / 1KB, 1)) KB[/]
+"@
+                Show-InTUIPanel -Title "[blue]Cache Statistics[/]" -Content $content -BorderColor Blue
+                Read-InTUIKey
+            }
             'Reset to Defaults' {
                 $confirm = Show-InTUIConfirm -Message "[yellow]Reset all settings to defaults?[/]"
                 if ($confirm) {
@@ -129,8 +182,12 @@ function Show-InTUISettings {
                         PageSize        = 50
                         RefreshInterval = 30
                         DefaultExportPath = $PWD
+                        CacheEnabled    = $true
+                        CacheTTL        = 300
                     }
                     $script:PageSize = 50
+                    $script:CacheEnabled = $true
+                    $script:CacheTTL = 300
                     Save-InTUIConfig
                     Show-InTUISuccess "Settings reset to defaults."
                 }

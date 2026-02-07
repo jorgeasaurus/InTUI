@@ -17,7 +17,7 @@ function Export-InTUIToCSV {
 
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $suggestedName = "${DefaultFileName}_${timestamp}.csv"
-    $exportPath = Read-SpectreText -Prompt "[blue]Export path[/]" -DefaultValue "$PWD/$suggestedName"
+    $exportPath = Read-SpectreText -Message "[blue]Export path[/]" -DefaultAnswer "$PWD/$suggestedName"
 
     if (-not $exportPath) { return }
 

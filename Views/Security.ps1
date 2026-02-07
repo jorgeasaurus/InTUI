@@ -16,6 +16,7 @@ function Show-InTUISecurityView {
         $choices = @(
             'Security Baselines',
             'Endpoint Protection Policies',
+            'Microsoft Defender Overview',
             'BitLocker Recovery Keys',
             '─────────────',
             'Back to Home'
@@ -31,6 +32,9 @@ function Show-InTUISecurityView {
             }
             'Endpoint Protection Policies' {
                 Show-InTUIEndpointProtectionList
+            }
+            'Microsoft Defender Overview' {
+                Show-InTUIDefenderOverview
             }
             'BitLocker Recovery Keys' {
                 Show-InTUIBitLockerKeys
@@ -83,7 +87,7 @@ function Show-InTUISecurityBaselineList {
             $assigned = if ($intent.isAssigned) { 'Yes' } else { 'No' }
             $modified = Format-InTUIDate -DateString $intent.lastModifiedDateTime
 
-            $displayName = "[white]$($intent.displayName)[/] [grey]| Assigned: $assigned | $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $intent.displayName)[/] [grey]| Assigned: $assigned | $modified[/]"
             $intentChoices += $displayName
         }
 
@@ -150,7 +154,7 @@ function Show-InTUISecurityBaselineDetail {
         $assigned = if ($intent.isAssigned) { '[green]Yes[/]' } else { '[grey]No[/]' }
 
         $propsContent = @"
-[bold white]$($intent.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $intent.displayName)[/]
 
 [grey]Description:[/]       $(if ($intent.description) { $intent.description.Substring(0, [Math]::Min(200, $intent.description.Length)) } else { 'N/A' })
 [grey]Assigned:[/]          $assigned
@@ -322,7 +326,7 @@ function Show-InTUIEndpointProtectionList {
             $typeName = ($config.'@odata.type' -replace '#microsoft\.graph\.', '')
             $modified = Format-InTUIDate -DateString $config.lastModifiedDateTime
 
-            $displayName = "[white]$($config.displayName)[/] [grey]| $typeName | $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $config.displayName)[/] [grey]| $typeName | $modified[/]"
             $configChoices += $displayName
         }
 
@@ -389,7 +393,7 @@ function Show-InTUIEndpointProtectionDetail {
         $typeName = ($config.'@odata.type' -replace '#microsoft\.graph\.', '')
 
         $propsContent = @"
-[bold white]$($config.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $config.displayName)[/]
 
 [grey]Type:[/]              $typeName
 [grey]Description:[/]       $(if ($config.description) { $config.description.Substring(0, [Math]::Min(200, $config.description.Length)) } else { 'N/A' })
@@ -529,7 +533,7 @@ function Show-InTUIBitLockerKeys {
         Show-InTUIHeader
         Show-InTUIBreadcrumb -Path @('Home', 'Security', 'BitLocker Recovery Keys')
 
-        $searchTerm = Read-SpectreText -Prompt "[red]Enter device name or device ID to search[/]"
+        $searchTerm = Read-SpectreText -Message "[red]Enter device name or device ID to search[/]"
 
         if (-not $searchTerm) {
             $exitView = $true
@@ -669,4 +673,137 @@ function Show-InTUIBitLockerKeysForDevice {
             Read-InTUIKey
         }
     }
+}
+
+function Show-InTUIDefenderOverview {
+    <#
+    .SYNOPSIS
+        Displays Microsoft Defender aggregate status across all Windows devices.
+    #>
+    [CmdletBinding()]
+    param()
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Security', 'Microsoft Defender Overview')
+
+    Write-InTUILog -Message "Loading Defender overview"
+
+    $data = Show-InTUILoading -Title "[red]Loading Defender status...[/]" -ScriptBlock {
+        # Get Windows devices with protection state
+        $devices = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices?`$filter=contains(operatingSystem,'Windows')&`$select=id,deviceName,windowsProtectionState&`$top=200" -Beta
+
+        if (-not $devices.value) {
+            return $null
+        }
+
+        $stats = @{
+            Total = 0
+            RTPEnabled = 0
+            RTPDisabled = 0
+            MalwareProtectionEnabled = 0
+            SignaturesUpToDate = 0
+            SignaturesOutdated = 0
+            RebootRequired = 0
+            FullScanRequired = 0
+            ThreatLevels = @{
+                None = 0
+                Low = 0
+                Medium = 0
+                High = 0
+                Severe = 0
+                Unknown = 0
+            }
+            DevicesWithThreats = @()
+        }
+
+        foreach ($device in $devices.value) {
+            if (-not $device.windowsProtectionState) { continue }
+
+            $stats.Total++
+            $defender = $device.windowsProtectionState
+
+            if ($defender.realTimeProtectionEnabled) { $stats.RTPEnabled++ } else { $stats.RTPDisabled++ }
+            if ($defender.malwareProtectionEnabled) { $stats.MalwareProtectionEnabled++ }
+            if ($defender.signatureUpdateOverdue) { $stats.SignaturesOutdated++ } else { $stats.SignaturesUpToDate++ }
+            if ($defender.rebootRequired) { $stats.RebootRequired++ }
+            if ($defender.fullScanRequired) { $stats.FullScanRequired++ }
+
+            $threatState = $defender.deviceThreatState ?? 'unknown'
+            switch ($threatState) {
+                'none'   { $stats.ThreatLevels.None++ }
+                'low'    { $stats.ThreatLevels.Low++ }
+                'medium' { $stats.ThreatLevels.Medium++ }
+                'high'   { $stats.ThreatLevels.High++; $stats.DevicesWithThreats += $device }
+                'severe' { $stats.ThreatLevels.Severe++; $stats.DevicesWithThreats += $device }
+                default  { $stats.ThreatLevels.Unknown++ }
+            }
+        }
+
+        $stats
+    }
+
+    if ($null -eq $data -or $data.Total -eq 0) {
+        Show-InTUIWarning "No Windows devices with Defender data found."
+        Read-InTUIKey
+        return
+    }
+
+    Write-InTUILog -Message "Defender overview loaded" -Context @{
+        TotalDevices = $data.Total
+        RTPEnabled = $data.RTPEnabled
+        ThreatCount = $data.ThreatLevels.High + $data.ThreatLevels.Severe
+    }
+
+    # Protection Status Panel
+    $rtpPercent = if ($data.Total -gt 0) { [math]::Round(($data.RTPEnabled / $data.Total) * 100) } else { 0 }
+
+    $protectionContent = @"
+[bold]Real-Time Protection[/]
+[green]Enabled:[/]           $($data.RTPEnabled) devices ($rtpPercent%)
+[red]Disabled:[/]          $($data.RTPDisabled) devices
+
+[bold]Malware Protection[/]
+[green]Enabled:[/]           $($data.MalwareProtectionEnabled) devices
+
+[bold]Signature Status[/]
+[green]Up to Date:[/]        $($data.SignaturesUpToDate) devices
+[red]Outdated:[/]          $($data.SignaturesOutdated) devices
+
+[bold]Actions Required[/]
+[yellow]Reboot Required:[/]   $($data.RebootRequired) devices
+[yellow]Full Scan Required:[/] $($data.FullScanRequired) devices
+"@
+
+    Show-InTUIPanel -Title "[red]Protection Status ($($data.Total) Windows Devices)[/]" -Content $protectionContent -BorderColor Red
+
+    # Threat Levels Panel
+    $threatContent = @"
+[green]None:[/]      $($data.ThreatLevels.None) devices
+[yellow]Low:[/]       $($data.ThreatLevels.Low) devices
+[orange1]Medium:[/]    $($data.ThreatLevels.Medium) devices
+[red]High:[/]      $($data.ThreatLevels.High) devices
+[red bold]Severe:[/]    $($data.ThreatLevels.Severe) devices
+"@
+
+    Show-InTUIPanel -Title "[red]Threat Levels[/]" -Content $threatContent -BorderColor Red
+
+    # Show devices with high/severe threats
+    if ($data.DevicesWithThreats.Count -gt 0) {
+        Write-SpectreHost "[red bold]Devices with High/Severe Threats:[/]"
+        Write-SpectreHost ""
+
+        $rows = @()
+        foreach ($device in $data.DevicesWithThreats) {
+            $threatLevel = Get-InTUIThreatLevelDisplay -ThreatLevel $device.windowsProtectionState.deviceThreatState
+            $rows += , @(
+                ($device.deviceName ?? 'N/A'),
+                $threatLevel
+            )
+        }
+
+        Show-InTUITable -Title "Devices Requiring Attention" -Columns @('Device', 'Threat Level') -Rows $rows -BorderColor Red
+    }
+
+    Read-InTUIKey
 }

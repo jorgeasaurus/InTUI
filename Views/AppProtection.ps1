@@ -101,7 +101,7 @@ function Show-InTUIAppProtectionPolicyList {
         $policyChoices = @()
         foreach ($policy in $policies.Results) {
             $modified = Format-InTUIDate -DateString $policy.lastModifiedDateTime
-            $displayName = "[white]$($policy.displayName)[/] [grey]| $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $policy.displayName)[/] [grey]| $modified[/]"
             $policyChoices += $displayName
         }
 
@@ -182,7 +182,7 @@ function Show-InTUIAppProtectionPolicyDetail {
 
         # Panel 1: Properties
         $propsContent = @"
-[bold white]$($policy.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $policy.displayName)[/]
 
 [grey]Platform:[/]          $platformLabel
 [grey]Description:[/]       $(if ($policy.description) { $policy.description.Substring(0, [Math]::Min(200, $policy.description.Length)) } else { 'N/A' })

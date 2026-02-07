@@ -17,6 +17,8 @@ function Show-InTUIReportsView {
             'Stale Devices Report',
             'App Install Failures',
             'License Utilization',
+            'Compliance Trend Chart',
+            'Enrollment Trend Chart',
             '─────────────',
             'Back to Home'
         )
@@ -34,6 +36,12 @@ function Show-InTUIReportsView {
             }
             'License Utilization' {
                 Show-InTUILicenseUtilization
+            }
+            'Compliance Trend Chart' {
+                Show-InTUIComplianceTrendChart
+            }
+            'Enrollment Trend Chart' {
+                Show-InTUIEnrollmentTrendChart
             }
             'Back to Home' {
                 $exitView = $true
@@ -57,7 +65,7 @@ function Show-InTUIStaleDevicesReport {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Reports', 'Stale Devices')
 
-    $daysInput = Read-SpectreText -Prompt "[DarkOrange]Enter days threshold for stale devices[/]" -DefaultAnswer "30"
+    $daysInput = Read-SpectreText -Message "[DarkOrange]Enter days threshold for stale devices[/]" -DefaultAnswer "30"
     $days = 30
     if ($daysInput -match '^\d+$') {
         $days = [int]$daysInput
@@ -143,7 +151,7 @@ function Show-InTUIAppInstallFailures {
         $appChoices = @()
         foreach ($app in $apps.Results) {
             $appType = Get-InTUIAppTypeFriendlyName -ODataType $app.'@odata.type'
-            $appChoices += "[white]$($app.displayName)[/] [grey]| $appType[/]"
+            $appChoices += "[white]$(ConvertTo-InTUISafeMarkup -Text $app.displayName)[/] [grey]| $appType[/]"
         }
 
         $choiceMap = Get-InTUIChoiceMap -Choices $appChoices
@@ -278,6 +286,173 @@ function Show-InTUILicenseUtilization {
     }
 
     Show-InTUITable -Title "License Utilization" -Columns @('License', 'Total', 'Assigned', 'Available', 'Utilization %') -Rows $rows -BorderColor DarkOrange
+
+    Read-InTUIKey
+}
+
+function Show-InTUIComplianceTrendChart {
+    <#
+    .SYNOPSIS
+        Displays a bar chart of device compliance states.
+    #>
+    [CmdletBinding()]
+    param()
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Reports', 'Compliance Trend Chart')
+
+    Write-InTUILog -Message "Loading compliance chart data"
+
+    $data = Show-InTUILoading -Title "[DarkOrange]Loading compliance data...[/]" -ScriptBlock {
+        Invoke-InTUIGraphRequest -Uri '/deviceManagement/deviceCompliancePolicyDeviceStateSummary' -Beta
+    }
+
+    if ($null -eq $data) {
+        Show-InTUIWarning "Could not load compliance data."
+        Read-InTUIKey
+        return
+    }
+
+    Write-InTUILog -Message "Compliance chart data loaded" -Context @{
+        Compliant = $data.compliantDeviceCount
+        NonCompliant = $data.nonCompliantDeviceCount
+    }
+
+    Write-SpectreHost "[bold]Device Compliance Status[/]"
+    Write-SpectreHost ""
+
+    # Build chart data
+    $chartData = @(
+        @{ Label = "Compliant"; Value = ($data.compliantDeviceCount ?? 0); Color = "Green" }
+        @{ Label = "Non-Compliant"; Value = ($data.nonCompliantDeviceCount ?? 0); Color = "Red" }
+        @{ Label = "In Grace Period"; Value = ($data.inGracePeriodCount ?? 0); Color = "Yellow" }
+        @{ Label = "Conflict"; Value = ($data.conflictDeviceCount ?? 0); Color = "Orange1" }
+        @{ Label = "Error"; Value = ($data.errorCount ?? 0); Color = "Red3" }
+        @{ Label = "Not Evaluated"; Value = ($data.notEvaluatedDeviceCount ?? 0); Color = "Grey" }
+    )
+
+    # Filter out zero values for cleaner display
+    $chartData = @($chartData | Where-Object { $_.Value -gt 0 })
+
+    if ($chartData.Count -eq 0) {
+        Show-InTUIWarning "No compliance data to display."
+        Read-InTUIKey
+        return
+    }
+
+    # Create bar chart using PwshSpectreConsole
+    $chartItems = @()
+    foreach ($item in $chartData) {
+        $chartItems += New-SpectreChartItem -Label $item.Label -Value $item.Value -Color $item.Color
+    }
+
+    $chartItems | Format-SpectreBarChart -Label "Compliance Distribution" -Width 60
+
+    Write-SpectreHost ""
+
+    # Summary table
+    $total = ($data.compliantDeviceCount ?? 0) + ($data.nonCompliantDeviceCount ?? 0) +
+             ($data.inGracePeriodCount ?? 0) + ($data.conflictDeviceCount ?? 0) +
+             ($data.errorCount ?? 0) + ($data.notEvaluatedDeviceCount ?? 0)
+
+    $complianceRate = if ($total -gt 0) {
+        [math]::Round((($data.compliantDeviceCount ?? 0) / $total) * 100, 1)
+    } else { 0 }
+
+    $summaryContent = @"
+[grey]Total Devices:[/]        [white]$total[/]
+[grey]Compliance Rate:[/]      [white]$complianceRate%[/]
+[grey]Compliant:[/]            [green]$($data.compliantDeviceCount ?? 0)[/]
+[grey]Non-Compliant:[/]        [red]$($data.nonCompliantDeviceCount ?? 0)[/]
+"@
+
+    Show-InTUIPanel -Title "[DarkOrange]Summary[/]" -Content $summaryContent -BorderColor DarkOrange
+
+    Read-InTUIKey
+}
+
+function Show-InTUIEnrollmentTrendChart {
+    <#
+    .SYNOPSIS
+        Displays a bar chart of device enrollment by OS platform.
+    #>
+    [CmdletBinding()]
+    param()
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Reports', 'Enrollment Trend Chart')
+
+    Write-InTUILog -Message "Loading enrollment chart data"
+
+    $data = Show-InTUILoading -Title "[DarkOrange]Loading enrollment data...[/]" -ScriptBlock {
+        Invoke-InTUIGraphRequest -Uri '/deviceManagement/managedDeviceOverview' -Beta
+    }
+
+    if ($null -eq $data -or $null -eq $data.deviceOperatingSystemSummary) {
+        Show-InTUIWarning "Could not load enrollment data."
+        Read-InTUIKey
+        return
+    }
+
+    $osSummary = $data.deviceOperatingSystemSummary
+
+    Write-InTUILog -Message "Enrollment chart data loaded" -Context @{
+        Windows = $osSummary.windowsCount
+        iOS = $osSummary.iosCount
+        macOS = $osSummary.macOSCount
+        Android = $osSummary.androidCount
+    }
+
+    Write-SpectreHost "[bold]Device Enrollment by Platform[/]"
+    Write-SpectreHost ""
+
+    # Build chart data
+    $chartData = @(
+        @{ Label = "Windows"; Value = ($osSummary.windowsCount ?? 0); Color = "Blue" }
+        @{ Label = "iOS/iPadOS"; Value = ($osSummary.iosCount ?? 0); Color = "Grey" }
+        @{ Label = "macOS"; Value = ($osSummary.macOSCount ?? 0); Color = "Grey54" }
+        @{ Label = "Android"; Value = ($osSummary.androidCount ?? 0); Color = "Green" }
+        @{ Label = "Linux"; Value = ($osSummary.linuxCount ?? 0); Color = "Yellow" }
+    )
+
+    # Filter out zero values
+    $chartData = @($chartData | Where-Object { $_.Value -gt 0 })
+
+    if ($chartData.Count -eq 0) {
+        Show-InTUIWarning "No enrollment data to display."
+        Read-InTUIKey
+        return
+    }
+
+    # Create bar chart
+    $chartItems = @()
+    foreach ($item in $chartData) {
+        $chartItems += New-SpectreChartItem -Label $item.Label -Value $item.Value -Color $item.Color
+    }
+
+    $chartItems | Format-SpectreBarChart -Label "Enrollment by Platform" -Width 60
+
+    Write-SpectreHost ""
+
+    # Summary table
+    $total = $data.enrolledDeviceCount ?? 0
+
+    $summaryContent = @"
+[grey]Total Enrolled:[/]       [white]$total[/]
+[grey]MDM Enrolled:[/]         [white]$($data.mdmEnrolledCount ?? 0)[/]
+[grey]Dual Enrolled:[/]        [white]$($data.dualEnrolledDeviceCount ?? 0)[/]
+
+[bold]By Platform:[/]
+[blue]Windows:[/]              $($osSummary.windowsCount ?? 0)
+[grey]iOS/iPadOS:[/]           $($osSummary.iosCount ?? 0)
+[grey]macOS:[/]                $($osSummary.macOSCount ?? 0)
+[green]Android:[/]              $($osSummary.androidCount ?? 0)
+[yellow]Linux:[/]                $($osSummary.linuxCount ?? 0)
+"@
+
+    Show-InTUIPanel -Title "[DarkOrange]Enrollment Summary[/]" -Content $summaryContent -BorderColor DarkOrange
 
     Read-InTUIKey
 }

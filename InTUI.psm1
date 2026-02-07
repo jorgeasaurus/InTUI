@@ -9,6 +9,20 @@ $script:PageSize = 50
 $script:Connected = $false
 $script:CloudEnvironment = 'Global'
 
+# Cache settings
+$script:CachePath = Join-Path $HOME '.intui_cache'
+$script:CacheEnabled = $true
+$script:CacheTTL = 300  # 5 minutes default
+
+# Recording settings
+$script:RecordingEnabled = $false
+$script:RecordedActions = $null
+$script:RecordingStartTime = $null
+$script:RecordingEndTime = $null
+
+# Bookmarks
+$script:BookmarksPath = Join-Path $HOME '.intui_bookmarks.json'
+
 # Cloud environment definitions
 # GCC uses worldwide endpoints; GCC High uses graph.microsoft.us
 # See: https://learn.microsoft.com/en-us/graph/deployments

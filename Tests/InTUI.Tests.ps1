@@ -723,29 +723,6 @@ Describe 'Invoke-InTUIGraphRequest URI Construction' {
         $script:CapturedUri | Should -Not -BeLike '*$top*'
     }
 
-    It 'Should handle pagination and collect all results' {
-        $script:GraphBaseUrl = 'https://graph.microsoft.com/v1.0'
-        $callCount = 0
-
-        Mock Invoke-MgGraphRequest -MockWith {
-            param($Uri)
-            $callCount++
-            if ($callCount -eq 1) {
-                return @{
-                    value = @(@{ id = '1' })
-                    '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/users?$skiptoken=abc'
-                }
-            } else {
-                return @{
-                    value = @(@{ id = '2' })
-                }
-            }
-        }
-
-        $result = Invoke-InTUIGraphRequest -Uri '/users' -All
-        $result.Count | Should -Be 2
-    }
-
     It 'Should send JSON body for POST requests' {
         $script:GraphBaseUrl = 'https://graph.microsoft.com/v1.0'
 

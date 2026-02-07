@@ -49,7 +49,7 @@ function Show-InTUIDevicesView {
                 Show-InTUIComplianceOverview
             }
             'Search Device' {
-                $searchTerm = Read-SpectreText -Prompt "[blue]Search devices by name[/]"
+                $searchTerm = Read-SpectreText -Message "[blue]Search devices by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching devices" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIDeviceList -SearchTerm $searchTerm
@@ -227,6 +227,11 @@ $icon [bold]$($device.deviceName)[/]
 
         Show-InTUIPanel -Title "[cyan]Hardware Information[/]" -Content $hwContent -BorderColor Cyan1
 
+        # Show Defender status panel for Windows devices
+        if ($device.operatingSystem -match 'Windows') {
+            Show-InTUIDefenderPanel -DeviceId $DeviceId
+        }
+
         $actionChoices = @(
             'Sync Device',
             'Restart Device',
@@ -260,7 +265,7 @@ $icon [bold]$($device.deviceName)[/]
                 Show-InTUIDeviceAppStatus -DeviceId $DeviceId -DeviceName $device.deviceName
             }
             'Rename Device' {
-                $newName = Read-SpectreText -Prompt "[blue]Enter new device name[/]"
+                $newName = Read-SpectreText -Message "[blue]Enter new device name[/]"
                 if ($newName) {
                     $body = @{ deviceName = $newName }
                     $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId" -Method PATCH -Body $body -Beta
@@ -497,4 +502,69 @@ function Show-InTUIComplianceOverview {
             }
         }
     }
+}
+
+function Get-InTUIThreatLevelDisplay {
+    <#
+    .SYNOPSIS
+        Returns color-coded threat level display.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$ThreatLevel
+    )
+
+    switch ($ThreatLevel) {
+        'none'     { return "[green]None[/]" }
+        'low'      { return "[yellow]Low[/]" }
+        'medium'   { return "[orange1]Medium[/]" }
+        'high'     { return "[red]High[/]" }
+        'severe'   { return "[red bold]Severe[/]" }
+        default    { return "[grey]$($ThreatLevel ?? 'Unknown')[/]" }
+    }
+}
+
+function Show-InTUIDefenderPanel {
+    <#
+    .SYNOPSIS
+        Shows Defender protection status panel for a Windows device.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$DeviceId
+    )
+
+    # Fetch Windows protection state
+    $protectionState = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId`?`$select=windowsProtectionState" -Beta
+
+    if (-not $protectionState.windowsProtectionState) {
+        return  # No Defender data available
+    }
+
+    $defender = $protectionState.windowsProtectionState
+
+    $rtpStatus = if ($defender.realTimeProtectionEnabled) { "[green]Enabled[/]" } else { "[red]Disabled[/]" }
+    $malwareStatus = if ($defender.malwareProtectionEnabled) { "[green]Enabled[/]" } else { "[red]Disabled[/]" }
+    $networkStatus = if ($defender.networkInspectionSystemEnabled) { "[green]Enabled[/]" } else { "[grey]Disabled[/]" }
+    $rebootRequired = if ($defender.rebootRequired) { "[yellow]Yes[/]" } else { "[green]No[/]" }
+    $fullScanRequired = if ($defender.fullScanRequired) { "[yellow]Yes[/]" } else { "[green]No[/]" }
+    $signatureOutOfDate = if ($defender.signatureUpdateOverdue) { "[red]Yes[/]" } else { "[green]No[/]" }
+
+    $threatLevel = Get-InTUIThreatLevelDisplay -ThreatLevel $defender.deviceThreatState
+
+    $defenderContent = @"
+[grey]Real-Time Protection:[/]     $rtpStatus
+[grey]Malware Protection:[/]       $malwareStatus
+[grey]Network Inspection:[/]       $networkStatus
+[grey]Device Threat Level:[/]      $threatLevel
+[grey]Reboot Required:[/]          $rebootRequired
+[grey]Full Scan Required:[/]       $fullScanRequired
+[grey]Signatures Outdated:[/]      $signatureOutOfDate
+[grey]Last Quick Scan:[/]          $(Format-InTUIDate -DateString $defender.lastQuickScanDateTime)
+[grey]Last Full Scan:[/]           $(Format-InTUIDate -DateString $defender.lastFullScanDateTime)
+"@
+
+    Show-InTUIPanel -Title "[red]Microsoft Defender[/]" -Content $defenderContent -BorderColor Red
 }

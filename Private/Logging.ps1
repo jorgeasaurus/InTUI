@@ -30,7 +30,7 @@ function Initialize-InTUILog {
             '#' + ('-' * 79)
         ) -join "`n"
 
-        Set-Content -Path $script:LogFilePath -Value $header -Encoding UTF8
+        Set-Content -Path $script:LogFilePath -Value $header -Encoding UTF8 -ErrorAction Stop
         Write-Verbose "InTUI log initialized: $($script:LogFilePath)"
     }
     catch {

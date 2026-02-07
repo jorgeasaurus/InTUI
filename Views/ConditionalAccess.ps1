@@ -88,7 +88,8 @@ function Show-InTUIConditionalAccessPolicyList {
                 default                                { "[grey]$($policy.state)[/]" }
             }
 
-            $displayName = "[white]$($policy.displayName)[/] [grey]| $stateDisplay | $modified[/]"
+            $safeName = ConvertTo-InTUISafeMarkup -Text $policy.displayName
+            $displayName = "[white]$safeName[/] [grey]| $stateDisplay | $modified[/]"
             $policyChoices += $displayName
         }
 
@@ -149,7 +150,7 @@ function Show-InTUIConditionalAccessPolicyDetail {
         }
 
         $propsContent = @"
-[bold white]$($policy.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $policy.displayName)[/]
 
 [grey]State:[/]             $stateDisplay
 [grey]Created:[/]           $(Format-InTUIDate -DateString $policy.createdDateTime)
@@ -342,7 +343,7 @@ function Show-InTUINamedLocationList {
                 default                  { 'Unknown' }
             }
 
-            $displayName = "[white]$($location.displayName)[/] [grey]| $locType | $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $location.displayName)[/] [grey]| $locType | $modified[/]"
             $locationChoices += $displayName
         }
 
@@ -401,7 +402,7 @@ function Show-InTUINamedLocationDetail {
         }
 
         $propsContent = @"
-[bold white]$($location.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $location.displayName)[/]
 
 [grey]Type:[/]             $locType
 [grey]Created:[/]          $(Format-InTUIDate -DateString $location.createdDateTime)
@@ -487,7 +488,7 @@ function Show-InTUISignInLogs {
             $filter = 'status/errorCode ne 0'
         }
         'Specific User' {
-            $upn = Read-SpectreText -Prompt "[DeepSkyBlue1]Enter user principal name (UPN)[/]"
+            $upn = Read-SpectreText -Message "[DeepSkyBlue1]Enter user principal name (UPN)[/]"
             if (-not $upn) { return }
             $safeUpn = ConvertTo-InTUISafeFilterValue -Value $upn
             $filter = "userPrincipalName eq '$safeUpn'"

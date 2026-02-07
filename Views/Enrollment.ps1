@@ -18,6 +18,7 @@ function Show-InTUIEnrollmentView {
             'Autopilot Deployment Profiles',
             'Enrollment Configurations',
             'Apple Push Certificate',
+            'Apple DEP/ABM Tokens',
             '─────────────',
             'Back to Home'
         )
@@ -38,6 +39,9 @@ function Show-InTUIEnrollmentView {
             }
             'Apple Push Certificate' {
                 Show-InTUIApplePushCertificate
+            }
+            'Apple DEP/ABM Tokens' {
+                Show-InTUIAppleDEPTokens
             }
             'Back to Home' {
                 $exitView = $true
@@ -216,7 +220,7 @@ function Show-InTUIAutopilotProfileList {
         foreach ($profile in $profiles.Results) {
             $modified = Format-InTUIDate -DateString $profile.lastModifiedDateTime
 
-            $displayName = "[white]$($profile.displayName)[/] [grey]| $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $profile.displayName)[/] [grey]| $modified[/]"
             $profileChoices += $displayName
         }
 
@@ -278,7 +282,7 @@ function Show-InTUIAutopilotProfileDetail {
         Show-InTUIBreadcrumb -Path @('Home', 'Enrollment', 'Autopilot Deployment Profiles', $profile.displayName)
 
         $propsContent = @"
-[bold white]$($profile.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $profile.displayName)[/]
 
 [grey]Description:[/]               $(if ($profile.description) { $profile.description.Substring(0, [Math]::Min(200, $profile.description.Length)) } else { 'N/A' })
 "@
@@ -400,7 +404,7 @@ function Show-InTUIEnrollmentConfigList {
             $modified = Format-InTUIDate -DateString $config.lastModifiedDateTime
             $priority = $config.priority ?? 'N/A'
 
-            $displayName = "[white]$($config.displayName)[/] [grey]| $priority | $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $config.displayName)[/] [grey]| $priority | $modified[/]"
             $configChoices += $displayName
         }
 
@@ -464,7 +468,7 @@ function Show-InTUIEnrollmentConfigDetail {
         $friendlyType = Get-InTUIEnrollmentConfigTypeFriendlyName -ODataType $config.'@odata.type'
 
         $propsContent = @"
-[bold white]$($config.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $config.displayName)[/]
 
 [grey]Type:[/]              $friendlyType
 [grey]Description:[/]       $(if ($config.description) { $config.description.Substring(0, [Math]::Min(200, $config.description.Length)) } else { 'N/A' })
@@ -577,6 +581,278 @@ function Show-InTUIApplePushCertificate {
         AppleIdentifier = $cert.appleIdentifier
         Expiration = $cert.expirationDateTime
         ExpirationWarning = $expirationWarning
+    }
+
+    Read-InTUIKey
+}
+
+function Show-InTUIAppleDEPTokens {
+    <#
+    .SYNOPSIS
+        Displays Apple DEP/ABM enrollment program tokens.
+    #>
+    [CmdletBinding()]
+    param()
+
+    $exitList = $false
+
+    while (-not $exitList) {
+        Clear-Host
+        Show-InTUIHeader
+        Show-InTUIBreadcrumb -Path @('Home', 'Enrollment', 'Apple DEP/ABM Tokens')
+
+        $tokens = Show-InTUILoading -Title "[steelblue1_1]Loading DEP/ABM tokens...[/]" -ScriptBlock {
+            Invoke-InTUIGraphRequest -Uri '/deviceManagement/depOnboardingSettings' -Beta
+        }
+
+        if (-not $tokens.value) {
+            Show-InTUIWarning "No Apple DEP/ABM tokens configured."
+            Read-InTUIKey
+            $exitList = $true
+            continue
+        }
+
+        Write-InTUILog -Message "DEP tokens loaded" -Context @{ Count = @($tokens.value).Count }
+
+        $tokenChoices = @()
+        foreach ($token in $tokens.value) {
+            $expiration = if ($token.tokenExpirationDateTime) {
+                try {
+                    $expDate = [DateTime]::Parse($token.tokenExpirationDateTime)
+                    $daysUntil = ($expDate - [DateTime]::UtcNow).TotalDays
+
+                    if ($daysUntil -le 30) {
+                        "[red]Expires: $(Format-InTUIDate -DateString $token.tokenExpirationDateTime)[/]"
+                    }
+                    elseif ($daysUntil -le 60) {
+                        "[yellow]Expires: $(Format-InTUIDate -DateString $token.tokenExpirationDateTime)[/]"
+                    }
+                    else {
+                        "[green]Expires: $(Format-InTUIDate -DateString $token.tokenExpirationDateTime)[/]"
+                    }
+                }
+                catch {
+                    "Expires: $(Format-InTUIDate -DateString $token.tokenExpirationDateTime)"
+                }
+            }
+            else {
+                "[grey]No expiration[/]"
+            }
+
+            $tokenName = $token.tokenName ?? $token.appleIdentifier ?? 'Unknown Token'
+            $tokenChoices += "[white]$tokenName[/] [grey]| $expiration[/]"
+        }
+
+        $choiceMap = Get-InTUIChoiceMap -Choices $tokenChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Sync All Tokens' + 'Back')
+
+        Show-InTUIStatusBar -Total @($tokens.value).Count -Showing @($tokens.value).Count
+
+        $selection = Show-InTUIMenu -Title "[steelblue1_1]Select a DEP/ABM token[/]" -Choices $menuChoices
+
+        switch ($selection) {
+            'Back' {
+                $exitList = $true
+            }
+            'Sync All Tokens' {
+                Invoke-InTUIDEPSync
+            }
+            '─────────────' {
+                continue
+            }
+            default {
+                $idx = $choiceMap.IndexMap[$selection]
+                if ($null -ne $idx -and $idx -lt @($tokens.value).Count) {
+                    Show-InTUIAppleDEPTokenDetail -TokenId @($tokens.value)[$idx].id
+                }
+            }
+        }
+    }
+}
+
+function Show-InTUIAppleDEPTokenDetail {
+    <#
+    .SYNOPSIS
+        Displays detailed information about a specific DEP/ABM token.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$TokenId
+    )
+
+    $exitDetail = $false
+
+    while (-not $exitDetail) {
+        Clear-Host
+        Show-InTUIHeader
+
+        $token = Show-InTUILoading -Title "[steelblue1_1]Loading token details...[/]" -ScriptBlock {
+            Invoke-InTUIGraphRequest -Uri "/deviceManagement/depOnboardingSettings/$TokenId" -Beta
+        }
+
+        if ($null -eq $token) {
+            Show-InTUIError "Failed to load DEP/ABM token details."
+            Read-InTUIKey
+            return
+        }
+
+        $tokenName = $token.tokenName ?? $token.appleIdentifier ?? 'DEP Token'
+        Show-InTUIBreadcrumb -Path @('Home', 'Enrollment', 'Apple DEP/ABM Tokens', $tokenName)
+
+        # Check expiration
+        $expirationDisplay = Format-InTUIDate -DateString $token.tokenExpirationDateTime
+        $expirationWarning = $false
+        if ($token.tokenExpirationDateTime) {
+            try {
+                $expDate = [DateTime]::Parse($token.tokenExpirationDateTime)
+                $daysUntil = ($expDate - [DateTime]::UtcNow).TotalDays
+
+                if ($daysUntil -le 30) {
+                    $expirationDisplay = "[red]$expirationDisplay (EXPIRES in $([math]::Floor($daysUntil)) days!)[/]"
+                    $expirationWarning = $true
+                }
+                elseif ($daysUntil -le 60) {
+                    $expirationDisplay = "[yellow]$expirationDisplay ($([math]::Floor($daysUntil)) days remaining)[/]"
+                }
+                else {
+                    $expirationDisplay = "[green]$expirationDisplay ($([math]::Floor($daysUntil)) days remaining)[/]"
+                }
+            }
+            catch {
+                # Use default display
+            }
+        }
+
+        $tokenType = switch ($token.tokenType) {
+            'dep'    { 'Device Enrollment Program (DEP)' }
+            'appleSchoolManager' { 'Apple School Manager' }
+            'appleBusinessManager' { 'Apple Business Manager' }
+            default  { $token.tokenType ?? 'Unknown' }
+        }
+
+        $propsContent = @"
+[bold white]$tokenName[/]
+
+[grey]Token Type:[/]              $tokenType
+[grey]Apple Identifier:[/]        $($token.appleIdentifier ?? 'N/A')
+[grey]Token Name:[/]              $($token.tokenName ?? 'N/A')
+[grey]Token Expiration:[/]        $expirationDisplay
+[grey]Last Modified:[/]           $(Format-InTUIDate -DateString $token.lastModifiedDateTime)
+[grey]Last Successful Sync:[/]    $(Format-InTUIDate -DateString $token.lastSuccessfulSyncDateTime)
+[grey]Last Sync Error:[/]         $(Format-InTUIDate -DateString $token.lastSyncErrorCode)
+[grey]Sync Triggered By:[/]       $($token.lastSyncTriggeredDateTime ?? 'N/A')
+[grey]Data Sharing Consent:[/]    $($token.dataSharingConsentGranted ?? $false)
+"@
+
+        Show-InTUIPanel -Title "[steelblue1_1]DEP/ABM Token Properties[/]" -Content $propsContent -BorderColor SteelBlue1_1
+
+        if ($expirationWarning) {
+            Write-SpectreHost "[red]WARNING: This token is expiring soon. Renew in Apple Business/School Manager.[/]"
+            Write-SpectreHost ""
+        }
+
+        # Enrollment profiles linked to this token
+        $profilesContent = "[grey]View linked enrollment profiles in Autopilot Deployment Profiles[/]"
+        Show-InTUIPanel -Title "[steelblue1_1]Enrollment Profiles[/]" -Content $profilesContent -BorderColor SteelBlue1_1
+
+        Write-InTUILog -Message "Viewed DEP token detail" -Context @{
+            TokenId = $TokenId
+            TokenName = $tokenName
+            ExpirationWarning = $expirationWarning
+        }
+
+        $actionChoices = @(
+            'Sync This Token',
+            '─────────────',
+            'Back'
+        )
+
+        $action = Show-InTUIMenu -Title "[steelblue1_1]Actions[/]" -Choices $actionChoices
+
+        switch ($action) {
+            'Sync This Token' {
+                Invoke-InTUIDEPSync -TokenId $TokenId
+            }
+            'Back' {
+                $exitDetail = $true
+            }
+            default {
+                continue
+            }
+        }
+    }
+}
+
+function Invoke-InTUIDEPSync {
+    <#
+    .SYNOPSIS
+        Triggers a sync for DEP/ABM tokens.
+    .PARAMETER TokenId
+        Optional specific token ID to sync. If not provided, syncs all tokens.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$TokenId
+    )
+
+    $confirm = Show-InTUIConfirm -Message "[yellow]Sync DEP/ABM devices from Apple?[/]"
+
+    if (-not $confirm) {
+        return
+    }
+
+    if ($TokenId) {
+        Write-InTUILog -Message "Syncing specific DEP token" -Context @{ TokenId = $TokenId }
+
+        $result = Show-InTUILoading -Title "[steelblue1_1]Syncing DEP token...[/]" -ScriptBlock {
+            Invoke-InTUIGraphRequest -Uri "/deviceManagement/depOnboardingSettings/$TokenId/syncWithAppleDeviceEnrollmentProgram" -Method POST -Beta
+        }
+
+        if ($null -ne $result) {
+            Show-InTUISuccess "DEP sync initiated successfully."
+        }
+        else {
+            Show-InTUIError "Failed to initiate DEP sync."
+        }
+    }
+    else {
+        # Sync all tokens
+        Write-InTUILog -Message "Syncing all DEP tokens"
+
+        $tokens = Show-InTUILoading -Title "[steelblue1_1]Loading tokens...[/]" -ScriptBlock {
+            Invoke-InTUIGraphRequest -Uri '/deviceManagement/depOnboardingSettings' -Beta
+        }
+
+        if (-not $tokens.value) {
+            Show-InTUIWarning "No DEP tokens found to sync."
+            Read-InTUIKey
+            return
+        }
+
+        $successCount = 0
+        $failCount = 0
+
+        foreach ($token in $tokens.value) {
+            $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/depOnboardingSettings/$($token.id)/syncWithAppleDeviceEnrollmentProgram" -Method POST -Beta
+
+            if ($null -ne $result) {
+                $successCount++
+            }
+            else {
+                $failCount++
+            }
+        }
+
+        Write-InTUILog -Message "DEP sync completed" -Context @{ Success = $successCount; Failed = $failCount }
+
+        if ($failCount -eq 0) {
+            Show-InTUISuccess "Sync initiated for $successCount token(s)."
+        }
+        else {
+            Show-InTUIWarning "Sync initiated for $successCount token(s), $failCount failed."
+        }
     }
 
     Read-InTUIKey

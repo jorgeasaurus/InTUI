@@ -33,6 +33,8 @@ function Start-InTUI {
     )
 
     Initialize-InTUILog
+    Initialize-InTUIConfig
+    Initialize-InTUICache
     Write-InTUILog -Message "InTUI starting" -Context @{ Version = $script:InTUIVersion; Environment = $Environment }
 
     if (-not $SkipConnect) {
@@ -86,10 +88,18 @@ function Start-InTUI {
             'Scripts & Remediations',
             'Security',
             'Reports',
-            '─────────────',
+            '───── Tools ─────',
+            'Global Search',
+            'Bookmarks',
+            'Compare Tenants',
+            'Live Dashboard (Auto-Refresh)',
+            'Script Recording',
+            'Settings',
+            '───── Session ─────',
             'Refresh Dashboard',
             'Switch Tenant',
             'Switch Cloud Environment',
+            'Help',
             'Exit'
         )
 
@@ -140,12 +150,41 @@ function Start-InTUI {
                 Write-InTUILog -Message "Navigating to Reports view"
                 Show-InTUIReportsView
             }
+            'Global Search' {
+                Write-InTUILog -Message "Opening Global Search"
+                Invoke-InTUIGlobalSearch
+            }
+            'Bookmarks' {
+                Write-InTUILog -Message "Opening Bookmarks"
+                Show-InTUIBookmarks
+            }
+            'Compare Tenants' {
+                Write-InTUILog -Message "Opening Tenant Comparison"
+                Show-InTUITenantComparison
+            }
+            'Live Dashboard (Auto-Refresh)' {
+                Write-InTUILog -Message "Starting Live Dashboard"
+                $interval = $script:InTUIConfig.RefreshInterval
+                Start-InTUIAutoRefresh -IntervalSeconds $interval
+            }
+            'Script Recording' {
+                Write-InTUILog -Message "Opening Script Recording menu"
+                Show-InTUIRecordingMenu
+            }
+            'Settings' {
+                Write-InTUILog -Message "Opening Settings"
+                Show-InTUISettings
+            }
+            'Help' {
+                Write-InTUILog -Message "Opening Help"
+                Show-InTUIHelp
+            }
             'Refresh Dashboard' {
                 Write-InTUILog -Message "Refreshing dashboard"
                 continue
             }
             'Switch Tenant' {
-                $newTenant = Read-SpectreText -Prompt "[blue]Enter Tenant ID or domain[/]"
+                $newTenant = Read-SpectreText -Message "[blue]Enter Tenant ID or domain[/]"
                 if ($newTenant) {
                     Write-InTUILog -Message "Switching tenant" -Context @{ NewTenant = $newTenant }
                     Disconnect-MgGraph -ErrorAction SilentlyContinue

@@ -124,12 +124,25 @@ function Invoke-InTUIGraphRequest {
         $fullUri = "$fullUri$separator`$top=$Top"
     }
 
+    # Check cache for GET requests
+    if ($Method -eq 'GET' -and $script:CacheEnabled) {
+        $cached = Get-InTUICachedResponse -Uri $fullUri -Method $Method -Beta:$Beta
+        if ($null -ne $cached) {
+            return $cached
+        }
+    }
+
     Write-InTUILog -Message "Graph API request" -Context @{
         Method = $Method
         Uri = $fullUri
         Beta = [bool]$Beta
         All = [bool]$All
         Environment = $script:CloudEnvironment
+    }
+
+    # Record action for script recording (only write operations)
+    if ($script:RecordingEnabled -and $Method -ne 'GET') {
+        Add-InTUIRecordedAction -Method $Method -Uri $Uri -Body $Body -Beta:$Beta
     }
 
     $params = @{
@@ -167,11 +180,23 @@ function Invoke-InTUIGraphRequest {
             }
 
             Write-InTUILog -Message "Graph API request completed" -Context @{ TotalResults = $allResults.Count; Pages = $pageCount }
+
+            # Cache the paginated results
+            if ($script:CacheEnabled) {
+                Set-InTUICachedResponse -Uri $fullUri -Data $allResults -Method $Method -Beta:$Beta
+            }
+
             return $allResults
         }
 
         $resultCount = if ($response.value) { @($response.value).Count } else { 1 }
         Write-InTUILog -Message "Graph API request completed" -Context @{ ResultCount = $resultCount }
+
+        # Cache single-page response
+        if ($Method -eq 'GET' -and $script:CacheEnabled) {
+            Set-InTUICachedResponse -Uri $fullUri -Data $response -Method $Method -Beta:$Beta
+        }
+
         return $response
     }
     catch {

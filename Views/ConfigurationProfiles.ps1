@@ -77,7 +77,7 @@ function Show-InTUIConfigProfilesView {
                 Show-InTUIConfigProfileList -PlatformFilter 'Android'
             }
             'Search Profiles' {
-                $searchTerm = Read-SpectreText -Prompt "[cyan]Search profiles by name[/]"
+                $searchTerm = Read-SpectreText -Message "[cyan]Search profiles by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching configuration profiles" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIConfigProfileList -SearchTerm $searchTerm
@@ -494,8 +494,16 @@ function Show-InTUILegacyProfileDetail {
 
         Show-InTUIPanel -Title "[cyan]Device Status Summary[/]" -Content $statusContent -BorderColor Cyan1
 
+        # Check for conflicts
+        $conflictCount = @($statusList | Where-Object { $_.status -eq 'conflict' }).Count
+        if ($conflictCount -gt 0) {
+            $conflictContent = "[red]$conflictCount device(s) have configuration conflicts![/]"
+            Show-InTUIPanel -Title "[orange1]Conflicts Detected[/]" -Content $conflictContent -BorderColor Orange1
+        }
+
         $actionChoices = @(
             'View Device Statuses',
+            'View Conflicts'
             '─────────────',
             'Back to Profiles'
         )
@@ -508,6 +516,9 @@ function Show-InTUILegacyProfileDetail {
             'View Device Statuses' {
                 Show-InTUILegacyProfileDeviceStatuses -ProfileId $ProfileId -ProfileName $profile.displayName
             }
+            'View Conflicts' {
+                Show-InTUIProfileConflicts -ProfileId $ProfileId -ProfileName $profile.displayName
+            }
             'Back to Profiles' {
                 $exitDetail = $true
             }
@@ -516,6 +527,55 @@ function Show-InTUILegacyProfileDetail {
             }
         }
     }
+}
+
+function Show-InTUIProfileConflicts {
+    <#
+    .SYNOPSIS
+        Displays devices with configuration conflicts for a profile.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProfileId,
+
+        [Parameter()]
+        [string]$ProfileName
+    )
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Configuration Profiles', $ProfileName, 'Conflicts')
+
+    $statuses = Show-InTUILoading -Title "[orange1]Loading conflict data...[/]" -ScriptBlock {
+        Invoke-InTUIGraphRequest -Uri "/deviceManagement/deviceConfigurations/$ProfileId/deviceStatuses?`$filter=status eq 'conflict'&`$top=50" -Beta
+    }
+
+    if (-not $statuses.value) {
+        Show-InTUISuccess "No conflicts found for this profile."
+        Read-InTUIKey
+        return
+    }
+
+    Write-InTUILog -Message "Profile conflicts found" -Context @{ ProfileName = $ProfileName; ConflictCount = @($statuses.value).Count }
+
+    $rows = @()
+    foreach ($status in $statuses.value) {
+        $rows += , @(
+            ($status.deviceDisplayName ?? 'N/A'),
+            "[orange1]conflict[/]",
+            ($status.userName ?? 'N/A'),
+            (Format-InTUIDate -DateString $status.lastReportedDateTime)
+        )
+    }
+
+    Show-InTUITable -Title "Configuration Conflicts - $ProfileName" -Columns @('Device', 'Status', 'User', 'Last Reported') -Rows $rows -BorderColor Orange1
+
+    Write-SpectreHost ""
+    Write-SpectreHost "[grey]Conflicts occur when multiple policies target the same setting with different values.[/]"
+    Write-SpectreHost "[grey]Review assigned policies to resolve conflicts.[/]"
+
+    Read-InTUIKey
 }
 
 function Show-InTUILegacyProfileDeviceStatuses {

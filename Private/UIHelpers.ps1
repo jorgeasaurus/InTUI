@@ -287,3 +287,25 @@ function Get-InTUIConfigProfileType {
         }
     }
 }
+
+function ConvertTo-InTUISafeMarkup {
+    <#
+    .SYNOPSIS
+        Escapes text for safe use in Spectre Console markup.
+    .DESCRIPTION
+        Escapes brackets so they are displayed literally instead of being
+        interpreted as markup tags.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Text
+    )
+
+    if ([string]::IsNullOrEmpty($Text)) {
+        return $Text
+    }
+
+    return $Text -replace '\[', '[[' -replace '\]', ']]'
+}

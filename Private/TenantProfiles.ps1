@@ -41,7 +41,7 @@ function Save-InTUITenantProfile {
     $profiles = @(Get-InTUITenantProfiles)
 
     if (-not $Label) {
-        $Label = Read-SpectreText -Prompt "[blue]Profile label[/]" -DefaultValue $script:TenantId
+        $Label = Read-SpectreText -Message "[blue]Profile label[/]" -DefaultAnswer $script:TenantId
     }
 
     $existing = $profiles | Where-Object { $_.TenantId -eq $script:TenantId -and $_.Environment -eq $script:CloudEnvironment }

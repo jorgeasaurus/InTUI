@@ -64,3 +64,56 @@ function Show-InTUIDashboard {
     $groupPanel | Out-SpectreHost
     Write-SpectreHost ""
 }
+
+function Start-InTUIAutoRefresh {
+    <#
+    .SYNOPSIS
+        Starts an auto-refresh loop for the dashboard.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [int]$IntervalSeconds = 30
+    )
+
+    if ($IntervalSeconds -lt 10) { $IntervalSeconds = 10 }
+    if ($IntervalSeconds -gt 300) { $IntervalSeconds = 300 }
+
+    Write-InTUILog -Message "Auto-refresh started" -Context @{ Interval = $IntervalSeconds }
+
+    $exitRefresh = $false
+
+    while (-not $exitRefresh) {
+        Clear-Host
+        Show-InTUIHeader -Subtitle "[grey]Live Dashboard - Auto-refresh every ${IntervalSeconds}s | Press any key to stop[/]"
+        Show-InTUIBreadcrumb -Path @('Home', 'Live Dashboard')
+        Show-InTUIDashboard
+
+        Write-SpectreHost ""
+        Write-SpectreHost "[grey]Last refresh: $([DateTime]::Now.ToString('HH:mm:ss')) | Next refresh in ${IntervalSeconds}s[/]"
+        Write-SpectreHost "[yellow]Press any key to stop auto-refresh...[/]"
+
+        # Wait for interval or key press
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+        while ($stopwatch.Elapsed.TotalSeconds -lt $IntervalSeconds) {
+            if ([Console]::KeyAvailable) {
+                $null = [Console]::ReadKey($true)
+                $exitRefresh = $true
+                break
+            }
+
+            # Update countdown
+            $remaining = $IntervalSeconds - [math]::Floor($stopwatch.Elapsed.TotalSeconds)
+            Write-Host -NoNewline "`r[grey]Refreshing in ${remaining}s...    [/]"
+
+            Start-Sleep -Milliseconds 500
+        }
+
+        $stopwatch.Stop()
+    }
+
+    Write-InTUILog -Message "Auto-refresh stopped"
+    Show-InTUISuccess "Auto-refresh stopped."
+    Read-InTUIKey
+}

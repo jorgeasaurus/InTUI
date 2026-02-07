@@ -22,6 +22,7 @@ function Show-InTUIAppsView {
             'Web Apps',
             'Microsoft 365 Apps',
             'App Install Status Monitor',
+            'Bulk Assign Apps',
             'Search Apps',
             '─────────────',
             'Back to Home'
@@ -56,8 +57,11 @@ function Show-InTUIAppsView {
             'App Install Status Monitor' {
                 Show-InTUIAppInstallStatusMonitor
             }
+            'Bulk Assign Apps' {
+                Invoke-InTUIBulkAppAssignment
+            }
             'Search Apps' {
-                $searchTerm = Read-SpectreText -Prompt "[green]Search apps by name[/]"
+                $searchTerm = Read-SpectreText -Message "[green]Search apps by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching apps" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIAppList -SearchTerm $searchTerm
@@ -159,7 +163,7 @@ function Show-InTUIAppList {
             $modified = Format-InTUIDate -DateString $app.lastModifiedDateTime
             $publisher = if ($app.publisher) { $app.publisher } else { 'Unknown' }
 
-            $displayName = "[white]$($app.displayName)[/] [grey]| $appType | $publisher | $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $app.displayName)[/] [grey]| $appType | $publisher | $modified[/]"
             $appChoices += $displayName
         }
 
@@ -245,7 +249,7 @@ function Show-InTUIAppDetail {
         $appType = Get-InTUIAppTypeFriendlyName -ODataType $app.'@odata.type'
 
         $propsContent = @"
-[bold white]$($app.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $app.displayName)[/]
 
 [grey]Type:[/]              $appType
 [grey]Publisher:[/]         $($app.publisher ?? 'N/A')
@@ -275,6 +279,7 @@ function Show-InTUIAppDetail {
 
         $actionChoices = @(
             'View Assignments',
+            'Create Assignment',
             'View Device Install Status',
             'View User Install Status',
             '─────────────',
@@ -288,6 +293,9 @@ function Show-InTUIAppDetail {
         switch ($action) {
             'View Assignments' {
                 Show-InTUIAppAssignments -AppId $AppId -AppName $app.displayName
+            }
+            'Create Assignment' {
+                New-InTUIAppAssignment -AppId $AppId -AppName $app.displayName
             }
             'View Device Install Status' {
                 Show-InTUIAppDeviceStatus -AppId $AppId -AppName $app.displayName
@@ -303,6 +311,166 @@ function Show-InTUIAppDetail {
             }
         }
     }
+}
+
+function Select-InTUIGroup {
+    <#
+    .SYNOPSIS
+        Displays a group picker and returns the selected group.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$Title = "Select a group"
+    )
+
+    $groups = Show-InTUILoading -Title "[green]Loading groups...[/]" -ScriptBlock {
+        Get-InTUIPagedResults -Uri '/groups' -PageSize 50 -Select 'id,displayName,description'
+    }
+
+    if ($null -eq $groups -or $groups.Results.Count -eq 0) {
+        Show-InTUIWarning "No groups found."
+        return $null
+    }
+
+    $groupChoices = @()
+    foreach ($group in $groups.Results) {
+        $desc = if ($group.description) { $group.description.Substring(0, [Math]::Min(50, $group.description.Length)) } else { 'No description' }
+        $groupChoices += "[white]$(ConvertTo-InTUISafeMarkup -Text $group.displayName)[/] [grey]| $desc[/]"
+    }
+
+    $choiceMap = Get-InTUIChoiceMap -Choices $groupChoices
+    $menuChoices = @($choiceMap.Choices + '─────────────' + 'Cancel')
+
+    $selection = Show-InTUIMenu -Title "[green]$Title[/]" -Choices $menuChoices
+
+    if ($selection -eq 'Cancel' -or $selection -eq '─────────────') {
+        return $null
+    }
+
+    $idx = $choiceMap.IndexMap[$selection]
+    if ($null -ne $idx -and $idx -lt $groups.Results.Count) {
+        return $groups.Results[$idx]
+    }
+
+    return $null
+}
+
+function New-InTUIAppAssignment {
+    <#
+    .SYNOPSIS
+        Creates a new app assignment.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AppId,
+
+        [Parameter()]
+        [string]$AppName
+    )
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Apps', $AppName, 'Create Assignment')
+
+    # Select intent
+    $intentChoices = @(
+        'Required (auto-install)',
+        'Available (user choice)',
+        'Uninstall',
+        '─────────────',
+        'Cancel'
+    )
+
+    $intentSelection = Show-InTUIMenu -Title "[green]Select Assignment Intent[/]" -Choices $intentChoices
+
+    if ($intentSelection -eq 'Cancel' -or $intentSelection -eq '─────────────') {
+        return
+    }
+
+    $intent = switch ($intentSelection) {
+        'Required (auto-install)' { 'required' }
+        'Available (user choice)' { 'available' }
+        'Uninstall'               { 'uninstall' }
+    }
+
+    # Select target type
+    $targetChoices = @(
+        'All Users',
+        'All Devices',
+        'Select Group',
+        '─────────────',
+        'Cancel'
+    )
+
+    $targetSelection = Show-InTUIMenu -Title "[green]Select Target[/]" -Choices $targetChoices
+
+    if ($targetSelection -eq 'Cancel' -or $targetSelection -eq '─────────────') {
+        return
+    }
+
+    $group = $null
+    $target = $null
+    $targetDisplay = $null
+
+    switch ($targetSelection) {
+        'All Users' {
+            $target = @{ '@odata.type' = '#microsoft.graph.allLicensedUsersAssignmentTarget' }
+            $targetDisplay = 'All Users'
+        }
+        'All Devices' {
+            $target = @{ '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget' }
+            $targetDisplay = 'All Devices'
+        }
+        'Select Group' {
+            $group = Select-InTUIGroup -Title "Select target group"
+            if (-not $group) { return }
+            $target = @{
+                '@odata.type' = '#microsoft.graph.groupAssignmentTarget'
+                groupId = $group.id
+            }
+            $targetDisplay = "Group: $(ConvertTo-InTUISafeMarkup -Text $group.displayName)"
+        }
+    }
+
+    $confirm = Show-InTUIConfirm -Message "[yellow]Create $intent assignment for $AppName to $targetDisplay?[/]"
+
+    if (-not $confirm) {
+        return
+    }
+
+    # Create assignment
+    $body = @{
+        mobileAppAssignments = @(
+            @{
+                '@odata.type' = '#microsoft.graph.mobileAppAssignment'
+                intent = $intent
+                target = $target
+                settings = $null
+            }
+        )
+    }
+
+    Write-InTUILog -Message "Creating app assignment" -Context @{
+        AppId = $AppId
+        AppName = $AppName
+        Intent = $intent
+        Target = $targetDisplay
+    }
+
+    $result = Show-InTUILoading -Title "[green]Creating assignment...[/]" -ScriptBlock {
+        Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/assign" -Method POST -Body $body -Beta
+    }
+
+    if ($null -ne $result) {
+        Show-InTUISuccess "Assignment created successfully."
+    }
+    else {
+        Show-InTUIError "Failed to create assignment."
+    }
+
+    Read-InTUIKey
 }
 
 function Show-InTUIAppAssignments {
@@ -474,7 +642,7 @@ function Show-InTUIAppInstallStatusMonitor {
     $choices = @()
     foreach ($app in $apps.Results) {
         $appType = Get-InTUIAppTypeFriendlyName -ODataType $app.'@odata.type'
-        $choices += "$($app.displayName) [grey]($appType)[/]"
+        $choices += "$(ConvertTo-InTUISafeMarkup -Text $app.displayName) [grey]($appType)[/]"
     }
     $choiceMap = Get-InTUIChoiceMap -Choices $choices
     $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
@@ -489,4 +657,180 @@ function Show-InTUIAppInstallStatusMonitor {
     if ($null -ne $idx -and $idx -lt $apps.Results.Count) {
         Show-InTUIAppDeviceStatus -AppId $apps.Results[$idx].id -AppName $apps.Results[$idx].displayName
     }
+}
+
+function Invoke-InTUIBulkAppAssignment {
+    <#
+    .SYNOPSIS
+        Assigns multiple apps to a group in bulk.
+    #>
+    [CmdletBinding()]
+    param()
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Apps', 'Bulk Assign Apps')
+
+    # Load apps
+    $apps = Show-InTUILoading -Title "[green]Loading apps...[/]" -ScriptBlock {
+        Get-InTUIPagedResults -Uri '/deviceAppManagement/mobileApps' -Beta -PageSize 50 -Select 'id,displayName'
+    }
+
+    if ($null -eq $apps -or $apps.Results.Count -eq 0) {
+        Show-InTUIWarning "No apps found."
+        Read-InTUIKey
+        return
+    }
+
+    Write-SpectreHost "[bold]Bulk App Assignment[/]"
+    Write-SpectreHost "[grey]Select multiple apps to assign to a group[/]"
+    Write-SpectreHost ""
+
+    # Multi-select apps
+    $appChoices = @()
+    foreach ($app in $apps.Results) {
+        $appType = Get-InTUIAppTypeFriendlyName -ODataType $app.'@odata.type'
+        $appChoices += "$(ConvertTo-InTUISafeMarkup -Text $app.displayName) [grey]($appType)[/]"
+    }
+
+    $selectedApps = Read-SpectreMultiSelection -Title "[green]Select apps (Space to select, Enter to confirm)[/]" -Choices $appChoices -PageSize 15
+
+    if (-not $selectedApps -or $selectedApps.Count -eq 0) {
+        Show-InTUIWarning "No apps selected."
+        Read-InTUIKey
+        return
+    }
+
+    # Map selections back to app objects
+    $selectedAppObjects = @()
+    foreach ($selection in $selectedApps) {
+        for ($i = 0; $i -lt $appChoices.Count; $i++) {
+            if ($appChoices[$i] -eq $selection) {
+                $selectedAppObjects += $apps.Results[$i]
+                break
+            }
+        }
+    }
+
+    Write-SpectreHost ""
+    Write-SpectreHost "[white]Selected $($selectedAppObjects.Count) app(s)[/]"
+
+    # Select intent
+    $intentChoices = @(
+        'Required (auto-install)',
+        'Available (user choice)',
+        'Uninstall',
+        '─────────────',
+        'Cancel'
+    )
+
+    $intentSelection = Show-InTUIMenu -Title "[green]Select Assignment Intent[/]" -Choices $intentChoices
+
+    if ($intentSelection -eq 'Cancel' -or $intentSelection -eq '─────────────') {
+        return
+    }
+
+    $intent = switch ($intentSelection) {
+        'Required (auto-install)' { 'required' }
+        'Available (user choice)' { 'available' }
+        'Uninstall'               { 'uninstall' }
+    }
+
+    # Select target
+    $targetChoices = @(
+        'All Users',
+        'All Devices',
+        'Select Group',
+        '─────────────',
+        'Cancel'
+    )
+
+    $targetSelection = Show-InTUIMenu -Title "[green]Select Target[/]" -Choices $targetChoices
+
+    if ($targetSelection -eq 'Cancel' -or $targetSelection -eq '─────────────') {
+        return
+    }
+
+    $group = $null
+    $target = $null
+    $targetDisplay = $null
+
+    switch ($targetSelection) {
+        'All Users' {
+            $target = @{ '@odata.type' = '#microsoft.graph.allLicensedUsersAssignmentTarget' }
+            $targetDisplay = 'All Users'
+        }
+        'All Devices' {
+            $target = @{ '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget' }
+            $targetDisplay = 'All Devices'
+        }
+        'Select Group' {
+            $group = Select-InTUIGroup -Title "Select target group"
+            if (-not $group) { return }
+            $target = @{
+                '@odata.type' = '#microsoft.graph.groupAssignmentTarget'
+                groupId = $group.id
+            }
+            $targetDisplay = "Group: $(ConvertTo-InTUISafeMarkup -Text $group.displayName)"
+        }
+    }
+
+    # Confirm
+    $appNames = ($selectedAppObjects | ForEach-Object { $_.displayName }) -join ", "
+    if ($appNames.Length -gt 100) {
+        $appNames = $appNames.Substring(0, 100) + "..."
+    }
+
+    $confirm = Show-InTUIConfirm -Message "[yellow]Create $intent assignments for $($selectedAppObjects.Count) apps to $targetDisplay?[/]"
+
+    if (-not $confirm) {
+        return
+    }
+
+    # Execute bulk assignment
+    Write-InTUILog -Message "Starting bulk app assignment" -Context @{
+        AppCount = $selectedAppObjects.Count
+        Intent = $intent
+        Target = $targetDisplay
+    }
+
+    $successCount = 0
+    $failCount = 0
+
+    $body = @{
+        mobileAppAssignments = @(
+            @{
+                '@odata.type' = '#microsoft.graph.mobileAppAssignment'
+                intent = $intent
+                target = $target
+                settings = $null
+            }
+        )
+    }
+
+    foreach ($app in $selectedAppObjects) {
+        $result = Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$($app.id)/assign" -Method POST -Body $body -Beta
+
+        if ($null -ne $result) {
+            $successCount++
+        }
+        else {
+            $failCount++
+            Write-InTUILog -Level 'WARN' -Message "Failed to assign app" -Context @{ AppName = $app.displayName }
+        }
+    }
+
+    Write-InTUILog -Message "Bulk assignment completed" -Context @{
+        Success = $successCount
+        Failed = $failCount
+    }
+
+    if ($failCount -eq 0) {
+        Show-InTUISuccess "Successfully assigned $successCount app(s) to $targetDisplay."
+    }
+    else {
+        Show-InTUIWarning "Assigned $successCount app(s), $failCount failed."
+    }
+
+    Read-InTUIKey
 }

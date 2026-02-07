@@ -33,7 +33,7 @@ function Show-InTUIUsersView {
                 Show-InTUIUserList -LicensedOnly
             }
             'Search Users' {
-                $searchTerm = Read-SpectreText -Prompt "[yellow]Search users by name or email[/]"
+                $searchTerm = Read-SpectreText -Message "[yellow]Search users by name or email[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching users" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIUserList -SearchTerm $searchTerm
@@ -115,7 +115,7 @@ function Show-InTUIUserList {
             $dept = if ($user.department) { $user.department } else { 'N/A' }
             $licenses = @($user.assignedLicenses).Count
 
-            $displayName = "$enabled [white]$($user.displayName)[/] [grey]| $($user.userPrincipalName) | $dept | $licenses license(s)[/]"
+            $displayName = "$enabled [white]$(ConvertTo-InTUISafeMarkup -Text $user.displayName)[/] [grey]| $($user.userPrincipalName) | $dept | $licenses license(s)[/]"
             $userChoices += $displayName
         }
 
@@ -170,7 +170,7 @@ function Show-InTUIUserDetail {
         $enabled = if ($user.accountEnabled) { '[green]Enabled[/]' } else { '[red]Disabled[/]' }
 
         $propsContent = @"
-[bold white]$($user.displayName)[/] $enabled
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $user.displayName)[/] $enabled
 
 [grey]UPN:[/]               $($user.userPrincipalName)
 [grey]Email:[/]             $($user.mail ?? 'N/A')
