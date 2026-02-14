@@ -14,18 +14,21 @@ function Show-InTUIUsersView {
         Show-InTUIBreadcrumb -Path @('Home', 'Users')
 
         $userChoices = @(
-            'All Users',
-            'Licensed Users',
-            'Search Users',
-            '─────────────',
-            'Back to Home'
+            "$([char]0x263A) All Users",
+            "$([char]0x2605) Licensed Users",
+            "$([char]0x2315) Search Users",
+            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
+            "$([char]0x2190) Back to Home"
         )
 
-        $selection = Show-InTUIMenu -Title "[yellow]Users[/]" -Choices $userChoices
+        $selection = Show-InTUIMenu -Title "[yellow]$([char]0x263A) Users[/]" -Choices $userChoices
 
         Write-InTUILog -Message "Users view selection" -Context @{ Selection = $selection }
 
-        switch ($selection) {
+        # Strip icon prefix for switch matching
+        $cleanSelection = $selection -replace "^.{1,2} ", ""
+
+        switch ($cleanSelection) {
             'All Users' {
                 Show-InTUIUserList
             }
@@ -33,7 +36,7 @@ function Show-InTUIUsersView {
                 Show-InTUIUserList -LicensedOnly
             }
             'Search Users' {
-                $searchTerm = Read-SpectreText -Message "[yellow]Search users by name or email[/]"
+                $searchTerm = Read-SpectreText -Message "[yellow]$([char]0x2315) Search users by name or email[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching users" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIUserList -SearchTerm $searchTerm

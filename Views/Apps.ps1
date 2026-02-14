@@ -14,25 +14,28 @@ function Show-InTUIAppsView {
         Show-InTUIBreadcrumb -Path @('Home', 'Apps')
 
         $appChoices = @(
-            'All Apps',
-            'Windows Apps',
-            'iOS/iPadOS Apps',
-            'macOS Apps',
-            'Android Apps',
-            'Web Apps',
-            'Microsoft 365 Apps',
-            'App Install Status Monitor',
-            'Bulk Assign Apps',
-            'Search Apps',
-            '─────────────',
-            'Back to Home'
+            "$([char]0x25A1) All Apps",
+            "$([char]0x25A0) Windows Apps",
+            "$([char]0x25CF) iOS/iPadOS Apps",
+            "$([char]0x25C6) macOS Apps",
+            "$([char]0x25B2) Android Apps",
+            "$([char]0x2B58) Web Apps",
+            "$([char]0x25A3) Microsoft 365 Apps",
+            "$([char]0x25A8) App Install Status Monitor",
+            "$([char]0x2630) Bulk Assign Apps",
+            "$([char]0x2315) Search Apps",
+            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
+            "$([char]0x2190) Back to Home"
         )
 
-        $selection = Show-InTUIMenu -Title "[green]Apps[/]" -Choices $appChoices
+        $selection = Show-InTUIMenu -Title "[green]$([char]0x25A6) Apps[/]" -Choices $appChoices
 
         Write-InTUILog -Message "Apps view selection" -Context @{ Selection = $selection }
 
-        switch ($selection) {
+        # Strip icon prefix for switch matching
+        $cleanSelection = $selection -replace "^.{1,2} ", ""
+
+        switch ($cleanSelection) {
             'All Apps' {
                 Show-InTUIAppList
             }
@@ -61,7 +64,7 @@ function Show-InTUIAppsView {
                 Invoke-InTUIBulkAppAssignment
             }
             'Search Apps' {
-                $searchTerm = Read-SpectreText -Message "[green]Search apps by name[/]"
+                $searchTerm = Read-SpectreText -Message "[green]$([char]0x2315) Search apps by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching apps" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIAppList -SearchTerm $searchTerm

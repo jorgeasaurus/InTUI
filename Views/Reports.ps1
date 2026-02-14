@@ -14,20 +14,23 @@ function Show-InTUIReportsView {
         Show-InTUIBreadcrumb -Path @('Home', 'Reports')
 
         $reportChoices = @(
-            'Stale Devices Report',
-            'App Install Failures',
-            'License Utilization',
-            'Compliance Trend Chart',
-            'Enrollment Trend Chart',
-            '─────────────',
-            'Back to Home'
+            "$([char]0x23F0) Stale Devices Report",
+            "$([char]0x2717) App Install Failures",
+            "$([char]0x2605) License Utilization",
+            "$([char]0x2713) Compliance Trend Chart",
+            "$([char]0x2B06) Enrollment Trend Chart",
+            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
+            "$([char]0x2190) Back to Home"
         )
 
-        $selection = Show-InTUIMenu -Title "[DarkOrange]Reports[/]" -Choices $reportChoices
+        $selection = Show-InTUIMenu -Title "[DarkOrange]$([char]0x25A3) Reports[/]" -Choices $reportChoices
 
         Write-InTUILog -Message "Reports view selection" -Context @{ Selection = $selection }
 
-        switch ($selection) {
+        # Strip icon prefix for switch matching
+        $cleanSelection = $selection -replace "^.{1,2} ", ""
+
+        switch ($cleanSelection) {
             'Stale Devices Report' {
                 Show-InTUIStaleDevicesReport
             }

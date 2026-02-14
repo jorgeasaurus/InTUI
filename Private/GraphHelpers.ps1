@@ -210,6 +210,13 @@ function Invoke-InTUIGraphRequest {
                 $errorMessage = $_.ErrorDetails.Message
             }
         }
+        # Fallback if message is still empty
+        if ([string]::IsNullOrWhiteSpace($errorMessage)) {
+            $errorMessage = "Request failed (HTTP $($_.Exception.Response.StatusCode))"
+            if ($_.Exception.Response.ReasonPhrase) {
+                $errorMessage += " - $($_.Exception.Response.ReasonPhrase)"
+            }
+        }
         Write-InTUILog -Level 'ERROR' -Message "Graph API Error: $errorMessage" -Context @{ Uri = $fullUri; Method = $Method }
         Write-SpectreHost "[red]Graph API Error: $errorMessage[/]"
         return $null
@@ -388,11 +395,73 @@ function Get-InTUIDeviceIcon {
     param([string]$OperatingSystem)
 
     switch -Wildcard ($OperatingSystem) {
-        '*Windows*' { return '[blue]■[/]' }
-        '*iOS*'     { return '[grey]●[/]' }
-        '*macOS*'   { return '[grey]◆[/]' }
-        '*Android*' { return '[green]▲[/]' }
-        '*Linux*'   { return '[yellow]◇[/]' }
-        default     { return '[grey]○[/]' }
+        '*Windows*' { return "[blue]$([char]0x25A0)[/]" }      # Filled square
+        '*iOS*'     { return "[grey]$([char]0x25CF)[/]" }      # Filled circle
+        '*iPadOS*'  { return "[grey]$([char]0x25A3)[/]" }      # Square with dot
+        '*macOS*'   { return "[grey]$([char]0x25C6)[/]" }      # Filled diamond
+        '*Android*' { return "[green]$([char]0x25B2)[/]" }     # Filled triangle
+        '*Linux*'   { return "[yellow]$([char]0x25C7)[/]" }    # Hollow diamond
+        default     { return "[grey]$([char]0x25CB)[/]" }      # Hollow circle
+    }
+}
+
+function Get-InTUIAppTypeIcon {
+    <#
+    .SYNOPSIS
+        Returns an icon based on application type.
+    #>
+    param([string]$AppType)
+
+    switch -Wildcard ($AppType) {
+        '*win32*'           { return "[blue]$([char]0x2B1B)[/]" }
+        '*msi*'             { return "[blue]$([char]0x229E)[/]" }
+        '*ios*'             { return "[grey]$([char]0x25C9)[/]" }
+        '*android*'         { return "[green]$([char]0x25B2)[/]" }
+        '*webApp*'          { return "[cyan]$([char]0x2B58)[/]" }
+        '*office*'          { return "[orange1]$([char]0x25A3)[/]" }
+        '*microsoft*'       { return "[blue]$([char]0x25A0)[/]" }
+        '*store*'           { return "[cyan]$([char]0x25A6)[/]" }
+        '*managed*'         { return "[yellow]$([char]0x25A8)[/]" }
+        default             { return "[grey]$([char]0x25A1)[/]" }
+    }
+}
+
+function Get-InTUIPolicyIcon {
+    <#
+    .SYNOPSIS
+        Returns an icon based on policy type.
+    #>
+    param([string]$PolicyType)
+
+    switch -Wildcard ($PolicyType) {
+        '*compliance*'      { return "[green]$([char]0x2713)[/]" }    # Check mark
+        '*configuration*'   { return "[blue]$([char]0x2699)[/]" }     # Gear
+        '*conditional*'     { return "[yellow]$([char]0x26A0)[/]" }   # Warning
+        '*security*'        { return "[red]$([char]0x26E8)[/]" }      # Shield
+        '*update*'          { return "[cyan]$([char]0x21BB)[/]" }     # Circular arrow
+        default             { return "[grey]$([char]0x25A1)[/]" }     # Square
+    }
+}
+
+function Get-InTUISecurityIcon {
+    <#
+    .SYNOPSIS
+        Returns security-related icons.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('Shield', 'Lock', 'Unlock', 'Key', 'Warning', 'Error', 'Check', 'Cross')]
+        [string]$Type
+    )
+
+    switch ($Type) {
+        'Shield'  { return "[blue]$([char]0x26E8)[/]" }
+        'Lock'    { return "[green]$([char]0x25A3)[/]" }
+        'Unlock'  { return "[yellow]$([char]0x25A2)[/]" }
+        'Key'     { return "[yellow]$([char]0x2318)[/]" }
+        'Warning' { return "[yellow]$([char]0x26A0)[/]" }
+        'Error'   { return "[red]$([char]0x2717)[/]" }
+        'Check'   { return "[green]$([char]0x2713)[/]" }
+        'Cross'   { return "[red]$([char]0x2717)[/]" }
     }
 }

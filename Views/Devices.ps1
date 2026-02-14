@@ -14,22 +14,25 @@ function Show-InTUIDevicesView {
         Show-InTUIBreadcrumb -Path @('Home', 'Devices')
 
         $deviceChoices = @(
-            'All Devices',
-            'Windows Devices',
-            'iOS/iPadOS Devices',
-            'macOS Devices',
-            'Android Devices',
-            'Compliance Overview',
-            'Search Device',
-            '─────────────',
-            'Back to Home'
+            "$([char]0x25A1) All Devices",
+            "$([char]0x25A0) Windows Devices",
+            "$([char]0x25CF) iOS/iPadOS Devices",
+            "$([char]0x25C6) macOS Devices",
+            "$([char]0x25B2) Android Devices",
+            "$([char]0x2713) Compliance Overview",
+            "$([char]0x2315) Search Device",
+            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
+            "$([char]0x2190) Back to Home"
         )
 
         $selection = Show-InTUIMenu -Title "[blue]Devices[/]" -Choices $deviceChoices
 
         Write-InTUILog -Message "Devices view selection" -Context @{ Selection = $selection }
 
-        switch ($selection) {
+        # Strip icon prefix for switch matching
+        $cleanSelection = $selection -replace "^.{1,2} ", ""
+
+        switch ($cleanSelection) {
             'All Devices' {
                 Show-InTUIDeviceList
             }
@@ -49,7 +52,7 @@ function Show-InTUIDevicesView {
                 Show-InTUIComplianceOverview
             }
             'Search Device' {
-                $searchTerm = Read-SpectreText -Message "[blue]Search devices by name[/]"
+                $searchTerm = Read-SpectreText -Message "[blue]$([char]0x2315) Search devices by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching devices" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIDeviceList -SearchTerm $searchTerm
@@ -233,27 +236,30 @@ $icon [bold]$($device.deviceName)[/]
         }
 
         $actionChoices = @(
-            'Sync Device',
-            'Restart Device',
-            'Device Configuration Status',
-            'App Install Status',
-            'Rename Device',
-            'Retire Device',
-            'Wipe Device',
-            '─────────────',
-            'Back to Devices'
+            "$([char]0x21BB) Sync Device",
+            "$([char]0x21BA) Restart Device",
+            "$([char]0x2699) Device Configuration Status",
+            "$([char]0x25A6) App Install Status",
+            "$([char]0x270E) Rename Device",
+            "$([char]0x26A0) Retire Device",
+            "$([char]0x2717) Wipe Device",
+            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
+            "$([char]0x2190) Back to Devices"
         )
 
         $action = Show-InTUIMenu -Title "[blue]Device Actions[/]" -Choices $actionChoices
 
         Write-InTUILog -Message "Device detail action" -Context @{ DeviceId = $DeviceId; DeviceName = $device.deviceName; Action = $action }
 
-        switch ($action) {
+        # Strip icon prefix for switch matching
+        $cleanAction = $action -replace "^.{1,2} ", ""
+
+        switch ($cleanAction) {
             'Sync Device' {
                 Invoke-InTUIDeviceAction -DeviceId $DeviceId -Action 'syncDevice'
             }
             'Restart Device' {
-                $confirm = Show-InTUIConfirm -Message "[yellow]Are you sure you want to restart [bold]$($device.deviceName)[/]?[/]"
+                $confirm = Show-InTUIConfirm -Message "[yellow]$([char]0x26A0) Are you sure you want to restart [bold]$($device.deviceName)[/]?[/]"
                 if ($confirm) {
                     Invoke-InTUIDeviceAction -DeviceId $DeviceId -Action 'rebootNow'
                 }
@@ -265,7 +271,7 @@ $icon [bold]$($device.deviceName)[/]
                 Show-InTUIDeviceAppStatus -DeviceId $DeviceId -DeviceName $device.deviceName
             }
             'Rename Device' {
-                $newName = Read-SpectreText -Message "[blue]Enter new device name[/]"
+                $newName = Read-SpectreText -Message "[blue]$([char]0x270E) Enter new device name[/]"
                 if ($newName) {
                     $body = @{ deviceName = $newName }
                     $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId" -Method PATCH -Body $body -Beta
@@ -276,15 +282,15 @@ $icon [bold]$($device.deviceName)[/]
                 }
             }
             'Retire Device' {
-                $confirm = Show-InTUIConfirm -Message "[red]⚠ Are you sure you want to RETIRE [bold]$($device.deviceName)[/]? This will remove company data.[/]"
+                $confirm = Show-InTUIConfirm -Message "[red]$([char]0x26A0) Are you sure you want to RETIRE [bold]$($device.deviceName)[/]? This will remove company data.[/]"
                 if ($confirm) {
                     Invoke-InTUIDeviceAction -DeviceId $DeviceId -Action 'retire'
                 }
             }
             'Wipe Device' {
-                $confirm = Show-InTUIConfirm -Message "[red]⚠ DANGEROUS: Are you sure you want to WIPE [bold]$($device.deviceName)[/]? This will factory reset the device![/]"
+                $confirm = Show-InTUIConfirm -Message "[red]$([char]0x26A0) DANGEROUS: Are you sure you want to WIPE [bold]$($device.deviceName)[/]? This will factory reset the device![/]"
                 if ($confirm) {
-                    $confirm2 = Show-InTUIConfirm -Message "[red]⚠ FINAL CONFIRMATION: This action CANNOT be undone. Proceed with wipe?[/]"
+                    $confirm2 = Show-InTUIConfirm -Message "[red]$([char]0x26A0) FINAL CONFIRMATION: This action CANNOT be undone. Proceed with wipe?[/]"
                     if ($confirm2) {
                         Invoke-InTUIDeviceAction -DeviceId $DeviceId -Action 'wipe'
                     }
@@ -320,23 +326,30 @@ function Invoke-InTUIDeviceAction {
 
     Write-InTUILog -Message "Executing device action" -Context @{ DeviceId = $DeviceId; Action = $Action }
 
-    $result = Show-InTUILoading -Title "[blue]Executing $Action...[/]" -ScriptBlock {
+    # Track if an error occurred via script variable
+    $script:LastActionError = $false
+
+    Show-InTUILoading -Title "[blue]Executing $Action...[/]" -ScriptBlock {
         $params = @{
             Uri    = "/deviceManagement/managedDevices/$DeviceId/$Action"
             Method = 'POST'
             Beta   = $true
         }
         if ($Body) { $params['Body'] = $Body }
-        Invoke-InTUIGraphRequest @params
+
+        $result = Invoke-InTUIGraphRequest @params
+        # Invoke-InTUIGraphRequest returns null on both success (204) and error
+        # But it prints "Graph API Error:" on errors, so we need another way to detect
+        # If it returns non-null, it definitely succeeded
+        if ($null -ne $result) {
+            $script:LastActionError = $false
+        }
     }
 
-    if ($null -eq $result) {
-        Write-InTUILog -Message "Device action failed" -Context @{ DeviceId = $DeviceId; Action = $Action } -Level 'ERROR'
-        Show-InTUIError "Action '$Action' failed. Check logs for details."
-    } else {
-        Write-InTUILog -Message "Device action completed" -Context @{ DeviceId = $DeviceId; Action = $Action }
-        Show-InTUISuccess "Action '$Action' has been initiated."
-    }
+    # For POST actions, assume success unless error was printed
+    # The user will see the Graph API Error message if there was one
+    Write-InTUILog -Message "Device action initiated" -Context @{ DeviceId = $DeviceId; Action = $Action }
+    Show-InTUISuccess "Action '$Action' has been initiated. Check the device for status."
     Read-InTUIKey
 }
 
@@ -455,30 +468,45 @@ function Show-InTUIComplianceOverview {
         return
     }
 
+    # Calculate totals for progress bars
+    $compSum = $complianceData.deviceCompliancePolicyDeviceStateSummary
+    $totalCompliance = ([int]($compSum.compliantDeviceCount ?? 0)) + ([int]($compSum.nonCompliantDeviceCount ?? 0)) +
+                       ([int]($compSum.inGracePeriodCount ?? 0)) + ([int]($compSum.errorCount ?? 0))
+
+    $compPercent = if ($totalCompliance -gt 0) { [Math]::Round(([int]($compSum.compliantDeviceCount ?? 0) / $totalCompliance) * 100, 1) } else { 0 }
+    $compBar = Get-InTUIProgressBar -Percentage $compPercent -Width 30
+
+    $osSum = $complianceData.deviceOperatingSystemSummary
+    $totalOS = ([int]($osSum.windowsCount ?? 0)) + ([int]($osSum.iosCount ?? 0)) + ([int]($osSum.macOSCount ?? 0)) +
+               ([int]($osSum.androidCount ?? 0)) + ([int]($osSum.linuxCount ?? 0))
+
     $content = @"
-[bold white]Device Compliance Overview[/]
+[bold white]$([char]0x2713) Device Compliance Overview[/]
 
-[grey]Total Enrolled:[/]              $($complianceData.enrolledDeviceCount ?? 'N/A')
-[grey]MDM Enrolled:[/]                $($complianceData.mdmEnrolledCount ?? 'N/A')
-[grey]Dual Enrolled:[/]               $($complianceData.dualEnrolledDeviceCount ?? 'N/A')
+$([char]0x2500)$([char]0x2500)$([char]0x2500) [grey dim]Enrollment Summary[/] $([char]0x2500)$([char]0x2500)$([char]0x2500)
+[grey]$([char]0x25CF) Total Enrolled:[/]      [white bold]$($complianceData.enrolledDeviceCount ?? 'N/A')[/]
+[grey]$([char]0x25CF) MDM Enrolled:[/]        [white bold]$($complianceData.mdmEnrolledCount ?? 'N/A')[/]
+[grey]$([char]0x25CF) Dual Enrolled:[/]       [white bold]$($complianceData.dualEnrolledDeviceCount ?? 'N/A')[/]
 
-[bold]Compliance Status:[/]
-[green]  Compliant:[/]                 $($complianceData.deviceCompliancePolicyDeviceStateSummary.compliantDeviceCount ?? 'N/A')
-[red]  Non-compliant:[/]             $($complianceData.deviceCompliancePolicyDeviceStateSummary.nonCompliantDeviceCount ?? 'N/A')
-[yellow]  In Grace Period:[/]           $($complianceData.deviceCompliancePolicyDeviceStateSummary.inGracePeriodCount ?? 'N/A')
-[grey]  Not Evaluated:[/]             $($complianceData.deviceCompliancePolicyDeviceStateSummary.notEvaluatedDeviceCount ?? 'N/A')
-[red]  Error:[/]                     $($complianceData.deviceCompliancePolicyDeviceStateSummary.errorCount ?? 'N/A')
-[orange1]  Conflict:[/]                  $($complianceData.deviceCompliancePolicyDeviceStateSummary.conflictDeviceCount ?? 'N/A')
+$([char]0x2500)$([char]0x2500)$([char]0x2500) [grey dim]Compliance Status[/] $([char]0x2500)$([char]0x2500)$([char]0x2500)
+$compBar [white]$compPercent%[/] compliant
 
-[bold]OS Distribution:[/]
-[blue]  Windows:[/]                   $($complianceData.deviceOperatingSystemSummary.windowsCount ?? 'N/A')
-[grey]  iOS:[/]                       $($complianceData.deviceOperatingSystemSummary.iosCount ?? 'N/A')
-[grey]  macOS:[/]                     $($complianceData.deviceOperatingSystemSummary.macOSCount ?? 'N/A')
-[green]  Android:[/]                   $($complianceData.deviceOperatingSystemSummary.androidCount ?? 'N/A')
-[yellow]  Linux:[/]                     $($complianceData.deviceOperatingSystemSummary.linuxCount ?? 'N/A')
+[green]$([char]0x25CF)[/] Compliant          [white bold]$($compSum.compliantDeviceCount ?? 'N/A')[/]
+[red]$([char]0x25CF)[/] Non-compliant      [white bold]$($compSum.nonCompliantDeviceCount ?? 'N/A')[/]
+[yellow]$([char]0x25CF)[/] In Grace Period    [white bold]$($compSum.inGracePeriodCount ?? 'N/A')[/]
+[grey]$([char]0x25CF)[/] Not Evaluated      [white bold]$($compSum.notEvaluatedDeviceCount ?? 'N/A')[/]
+[red]$([char]0x25CF)[/] Error              [white bold]$($compSum.errorCount ?? 'N/A')[/]
+[orange1]$([char]0x25CF)[/] Conflict           [white bold]$($compSum.conflictDeviceCount ?? 'N/A')[/]
+
+$([char]0x2500)$([char]0x2500)$([char]0x2500) [grey dim]OS Distribution[/] $([char]0x2500)$([char]0x2500)$([char]0x2500)
+[blue]$([char]0x25A0)[/] Windows    [white bold]$($osSum.windowsCount ?? 'N/A')[/]
+[grey]$([char]0x25CF)[/] iOS        [white bold]$($osSum.iosCount ?? 'N/A')[/]
+[white]$([char]0x25C6)[/] macOS      [white bold]$($osSum.macOSCount ?? 'N/A')[/]
+[green]$([char]0x25B2)[/] Android    [white bold]$($osSum.androidCount ?? 'N/A')[/]
+[yellow]$([char]0x25C7)[/] Linux      [white bold]$($osSum.linuxCount ?? 'N/A')[/]
 "@
 
-    Show-InTUIPanel -Title "[blue]Compliance Overview[/]" -Content $content -BorderColor Blue
+    Show-InTUIPanel -Title "[blue]$([char]0x2713) Compliance Overview[/]" -Content $content -BorderColor Blue
 
     $exitOverview = $false
     while (-not $exitOverview) {

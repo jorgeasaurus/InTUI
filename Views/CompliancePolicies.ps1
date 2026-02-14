@@ -24,7 +24,7 @@ function Show-InTUICompliancePoliciesView {
             'Back to Home'
         )
 
-        $selection = Show-InTUIMenu -Title "[magenta1]Compliance Policies[/]" -Choices $choices
+        $selection = Show-InTUIMenu -Title "[cyan]Compliance Policies[/]" -Choices $choices
 
         Write-InTUILog -Message "Compliance Policies view selection" -Context @{ Selection = $selection }
 
@@ -45,7 +45,7 @@ function Show-InTUICompliancePoliciesView {
                 Show-InTUICompliancePolicyList -PlatformFilter 'Android'
             }
             'Search Policies' {
-                $searchTerm = Read-SpectreText -Message "[magenta1]Search policies by name[/]"
+                $searchTerm = Read-SpectreText -Message "[cyan]Search policies by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching compliance policies" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUICompliancePolicyList -SearchTerm $searchTerm
@@ -99,7 +99,7 @@ function Show-InTUICompliancePolicyList {
             $params['Filter'] = "contains(displayName,'$safe')"
         }
 
-        $policies = Show-InTUILoading -Title "[magenta1]Loading compliance policies...[/]" -ScriptBlock {
+        $policies = Show-InTUILoading -Title "[cyan]Loading compliance policies...[/]" -ScriptBlock {
             Get-InTUIPagedResults @params
         }
 
@@ -140,7 +140,7 @@ function Show-InTUICompliancePolicyList {
 
         Show-InTUIStatusBar -Total $filteredResults.Count -Showing $filteredResults.Count -FilterText ($PlatformFilter ?? $SearchTerm)
 
-        $selection = Show-InTUIMenu -Title "[magenta1]Select a policy[/]" -Choices $menuChoices
+        $selection = Show-InTUIMenu -Title "[cyan]Select a policy[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
@@ -197,7 +197,7 @@ function Show-InTUICompliancePolicyDetail {
         Clear-Host
         Show-InTUIHeader
 
-        $detailData = Show-InTUILoading -Title "[magenta1]Loading policy details...[/]" -ScriptBlock {
+        $detailData = Show-InTUILoading -Title "[cyan]Loading policy details...[/]" -ScriptBlock {
             $pol = Invoke-InTUIGraphRequest -Uri "/deviceManagement/deviceCompliancePolicies/$PolicyId" -Beta
             $assign = Invoke-InTUIGraphRequest -Uri "/deviceManagement/deviceCompliancePolicies/$PolicyId/assignments" -Beta
             $devStatuses = Invoke-InTUIGraphRequest -Uri "/deviceManagement/deviceCompliancePolicies/$PolicyId/deviceStatuses?`$top=200" -Beta
@@ -238,7 +238,7 @@ function Show-InTUICompliancePolicyDetail {
 [grey]Version:[/]           $($policy.version ?? 'N/A')
 "@
 
-        Show-InTUIPanel -Title "[magenta1]Policy Properties[/]" -Content $propsContent -BorderColor Magenta1
+        Show-InTUIPanel -Title "[cyan]Policy Properties[/]" -Content $propsContent -BorderColor Cyan1
 
         # Panel 2: Assignments
         $assignmentCount = if ($assignments.value) { @($assignments.value).Count } else { 0 }
@@ -258,7 +258,7 @@ function Show-InTUICompliancePolicyDetail {
             }
         }
 
-        Show-InTUIPanel -Title "[magenta1]Assignments[/]" -Content $assignContent -BorderColor Magenta1
+        Show-InTUIPanel -Title "[cyan]Assignments[/]" -Content $assignContent -BorderColor Cyan1
 
         # Panel 3: Device Status Summary
         $statusList = if ($deviceStatuses.value) { @($deviceStatuses.value) } else { @() }
@@ -275,7 +275,7 @@ function Show-InTUICompliancePolicyDetail {
 [grey]Not Applicable:[/]  $notApplicable
 "@
 
-        Show-InTUIPanel -Title "[magenta1]Device Status Summary[/]" -Content $statusContent -BorderColor Magenta1
+        Show-InTUIPanel -Title "[cyan]Device Status Summary[/]" -Content $statusContent -BorderColor Cyan1
 
         # Panel 4: Setting Status Summary
         $settingList = if ($settingSummaries.value) { @($settingSummaries.value) } else { @() }
@@ -291,7 +291,7 @@ function Show-InTUICompliancePolicyDetail {
                 )
             }
 
-            Show-InTUITable -Title "Setting Status Summary" -Columns @('Setting', 'Compliant', 'NonCompliant', 'Error', 'Not Applicable') -Rows $settingRows -BorderColor Magenta1
+            Show-InTUITable -Title "Setting Status Summary" -Columns @('Setting', 'Compliant', 'NonCompliant', 'Error', 'Not Applicable') -Rows $settingRows -BorderColor Cyan1
         }
 
         $actionChoices = @(
@@ -301,7 +301,7 @@ function Show-InTUICompliancePolicyDetail {
             'Back to Policies'
         )
 
-        $action = Show-InTUIMenu -Title "[magenta1]Policy Actions[/]" -Choices $actionChoices
+        $action = Show-InTUIMenu -Title "[cyan]Policy Actions[/]" -Choices $actionChoices
 
         Write-InTUILog -Message "Compliance policy detail action" -Context @{ PolicyId = $PolicyId; PolicyName = $policy.displayName; Action = $action }
 
@@ -340,7 +340,7 @@ function Show-InTUICompliancePolicyDeviceStatuses {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Compliance Policies', $PolicyName, 'Device Statuses')
 
-    $statuses = Show-InTUILoading -Title "[magenta1]Loading device statuses...[/]" -ScriptBlock {
+    $statuses = Show-InTUILoading -Title "[cyan]Loading device statuses...[/]" -ScriptBlock {
         Invoke-InTUIGraphRequest -Uri "/deviceManagement/deviceCompliancePolicies/$PolicyId/deviceStatuses?`$top=50" -Beta
     }
 
@@ -368,7 +368,7 @@ function Show-InTUICompliancePolicyDeviceStatuses {
         )
     }
 
-    Show-InTUITable -Title "Device Statuses" -Columns @('Device', 'Status', 'User', 'Last Reported') -Rows $rows -BorderColor Magenta1
+    Show-InTUITable -Title "Device Statuses" -Columns @('Device', 'Status', 'User', 'Last Reported') -Rows $rows -BorderColor Cyan1
     Read-InTUIKey
 }
 
@@ -390,7 +390,7 @@ function Show-InTUICompliancePolicySettingStatuses {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Compliance Policies', $PolicyName, 'Per-Setting Status')
 
-    $settingSummaries = Show-InTUILoading -Title "[magenta1]Loading setting statuses...[/]" -ScriptBlock {
+    $settingSummaries = Show-InTUILoading -Title "[cyan]Loading setting statuses...[/]" -ScriptBlock {
         Invoke-InTUIGraphRequest -Uri "/deviceManagement/deviceCompliancePolicies/$PolicyId/deviceSettingStateSummaries" -Beta
     }
 
@@ -412,6 +412,6 @@ function Show-InTUICompliancePolicySettingStatuses {
         )
     }
 
-    Show-InTUITable -Title "Per-Setting Status" -Columns @('Setting', 'Compliant', 'NonCompliant', 'Error', 'Conflict', 'Not Applicable') -Rows $rows -BorderColor Magenta1
+    Show-InTUITable -Title "Per-Setting Status" -Columns @('Setting', 'Compliant', 'NonCompliant', 'Error', 'Conflict', 'Not Applicable') -Rows $rows -BorderColor Cyan1
     Read-InTUIKey
 }

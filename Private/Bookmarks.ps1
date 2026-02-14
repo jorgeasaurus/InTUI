@@ -5,7 +5,7 @@ $script:BookmarkIcons = @{
     Device           = '[blue]D[/]'
     App              = '[green]A[/]'
     User             = '[yellow]U[/]'
-    Group            = '[magenta]G[/]'
+    Group            = '[cyan]G[/]'
     ConfigProfile    = '[cyan]C[/]'
     CompliancePolicy = '[orange1]P[/]'
     SecurityBaseline = '[red]S[/]'
@@ -168,7 +168,7 @@ function Show-InTUIBookmarks {
 
         Show-InTUIStatusBar -Total $tenantBookmarks.Count -Showing $tenantBookmarks.Count
 
-        $selection = Show-InTUIMenu -Title "[magenta]Bookmarks[/]" -Choices $menuChoices
+        $selection = Show-InTUIMenu -Title "[cyan]Bookmarks[/]" -Choices $menuChoices
 
         switch ($selection) {
             'Back' {
@@ -199,7 +199,7 @@ function Show-InTUIBookmarks {
                         'Cancel'
                     )
 
-                    $action = Show-InTUIMenu -Title "[magenta]Bookmark Action[/]" -Choices $actionChoices
+                    $action = Show-InTUIMenu -Title "[cyan]Bookmark Action[/]" -Choices $actionChoices
 
                     switch ($action) {
                         'Navigate to View' {

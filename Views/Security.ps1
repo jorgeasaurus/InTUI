@@ -14,19 +14,22 @@ function Show-InTUISecurityView {
         Show-InTUIBreadcrumb -Path @('Home', 'Security')
 
         $choices = @(
-            'Security Baselines',
-            'Endpoint Protection Policies',
-            'Microsoft Defender Overview',
-            'BitLocker Recovery Keys',
-            '─────────────',
-            'Back to Home'
+            "$([char]0x26E8) Security Baselines",
+            "$([char]0x2699) Endpoint Protection Policies",
+            "$([char]0x26A0) Microsoft Defender Overview",
+            "$([char]0x2318) BitLocker Recovery Keys",
+            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
+            "$([char]0x2190) Back to Home"
         )
 
-        $selection = Show-InTUIMenu -Title "[red]Security[/]" -Choices $choices
+        $selection = Show-InTUIMenu -Title "[red]$([char]0x26E8) Security[/]" -Choices $choices
 
         Write-InTUILog -Message "Security view selection" -Context @{ Selection = $selection }
 
-        switch ($selection) {
+        # Strip icon prefix for switch matching
+        $cleanSelection = $selection -replace "^.{1,2} ", ""
+
+        switch ($cleanSelection) {
             'Security Baselines' {
                 Show-InTUISecurityBaselineList
             }

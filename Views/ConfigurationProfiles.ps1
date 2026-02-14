@@ -122,55 +122,43 @@ function Show-InTUIConfigProfileList {
         $allProfiles = Show-InTUILoading -Title "[cyan]Loading configuration profiles...[/]" -ScriptBlock {
             $normalized = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-            # Legacy device configurations
-            $legacyParams = @{
-                Uri      = '/deviceManagement/deviceConfigurations'
-                Beta     = $true
-                PageSize = 25
-            }
+            # Legacy device configurations - fetch all pages
+            $legacyUri = '/deviceManagement/deviceConfigurations'
             if ($SearchTerm) {
                 $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
-                $legacyParams['Filter'] = "contains(displayName,'$safe')"
+                $legacyUri += "?`$filter=contains(displayName,'$safe')"
             }
-            $legacy = Get-InTUIPagedResults @legacyParams
+            $legacy = Invoke-InTUIGraphRequest -Uri $legacyUri -Beta -All
 
-            if ($legacy -and $legacy.Results) {
-                foreach ($p in $legacy.Results) {
-                    $typeInfo = Get-InTUIConfigProfileType -ODataType $p.'@odata.type'
-                    $normalized.Add([PSCustomObject]@{
-                        Id       = $p.id
-                        Name     = $p.displayName
-                        Platform = $typeInfo.Platform
-                        Type     = $typeInfo.FriendlyName
-                        Modified = $p.lastModifiedDateTime
-                        Source   = 'Legacy'
-                    })
-                }
+            foreach ($p in @($legacy)) {
+                $typeInfo = Get-InTUIConfigProfileType -ODataType $p.'@odata.type'
+                $normalized.Add([PSCustomObject]@{
+                    Id       = $p.id
+                    Name     = $p.displayName
+                    Platform = $typeInfo.Platform
+                    Type     = $typeInfo.FriendlyName
+                    Modified = $p.lastModifiedDateTime
+                    Source   = 'Legacy'
+                })
             }
 
-            # Settings Catalog policies
-            $catalogParams = @{
-                Uri      = '/deviceManagement/configurationPolicies'
-                Beta     = $true
-                PageSize = 25
-            }
+            # Settings Catalog policies - fetch all pages
+            $catalogUri = '/deviceManagement/configurationPolicies'
             if ($SearchTerm) {
                 $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
-                $catalogParams['Filter'] = "contains(name,'$safe')"
+                $catalogUri += "?`$filter=contains(name,'$safe')"
             }
-            $catalog = Get-InTUIPagedResults @catalogParams
+            $catalog = Invoke-InTUIGraphRequest -Uri $catalogUri -Beta -All
 
-            if ($catalog -and $catalog.Results) {
-                foreach ($p in $catalog.Results) {
-                    $normalized.Add([PSCustomObject]@{
-                        Id       = $p.id
-                        Name     = $p.name
-                        Platform = Get-InTUIConfigPolicyPlatform -Platforms $p.platforms
-                        Type     = Get-InTUIConfigPolicyTechnology -Technologies $p.technologies
-                        Modified = $p.lastModifiedDateTime
-                        Source   = 'Catalog'
-                    })
-                }
+            foreach ($p in @($catalog)) {
+                $normalized.Add([PSCustomObject]@{
+                    Id       = $p.id
+                    Name     = $p.name
+                    Platform = Get-InTUIConfigPolicyPlatform -Platforms $p.platforms
+                    Type     = Get-InTUIConfigPolicyTechnology -Technologies $p.technologies
+                    Modified = $p.lastModifiedDateTime
+                    Source   = 'Catalog'
+                })
             }
 
             $normalized
@@ -547,20 +535,21 @@ function Show-InTUIProfileConflicts {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Configuration Profiles', $ProfileName, 'Conflicts')
 
-    $statuses = Show-InTUILoading -Title "[orange1]Loading conflict data...[/]" -ScriptBlock {
-        Invoke-InTUIGraphRequest -Uri "/deviceManagement/deviceConfigurations/$ProfileId/deviceStatuses?`$filter=status eq 'conflict'&`$top=50" -Beta
+    $conflicts = Show-InTUILoading -Title "[orange1]Loading conflict data...[/]" -ScriptBlock {
+        $allStatuses = Invoke-InTUIGraphRequest -Uri "/deviceManagement/deviceConfigurations/$ProfileId/deviceStatuses" -Beta -All
+        @($allStatuses | Where-Object { $_.status -eq 'conflict' })
     }
 
-    if (-not $statuses.value) {
+    if (-not $conflicts -or $conflicts.Count -eq 0) {
         Show-InTUISuccess "No conflicts found for this profile."
         Read-InTUIKey
         return
     }
 
-    Write-InTUILog -Message "Profile conflicts found" -Context @{ ProfileName = $ProfileName; ConflictCount = @($statuses.value).Count }
+    Write-InTUILog -Message "Profile conflicts found" -Context @{ ProfileName = $ProfileName; ConflictCount = $conflicts.Count }
 
     $rows = @()
-    foreach ($status in $statuses.value) {
+    foreach ($status in $conflicts) {
         $rows += , @(
             ($status.deviceDisplayName ?? 'N/A'),
             "[orange1]conflict[/]",

@@ -1,28 +1,28 @@
 function Get-InTUIGroupType {
     <#
     .SYNOPSIS
-        Determines the friendly group type name.
+        Determines the friendly group type name with icon.
     #>
     param($Group)
 
     if ($Group.groupTypes -contains 'DynamicMembership') {
-        if ($Group.securityEnabled) { return '[cyan]Dynamic Security[/]' }
-        else { return '[cyan]Dynamic M365[/]' }
+        if ($Group.securityEnabled) { return "[cyan]$([char]0x21BB) Dynamic Security[/]" }
+        else { return "[cyan]$([char]0x21BB) Dynamic M365[/]" }
     }
     elseif ($Group.securityEnabled -and -not $Group.mailEnabled) {
-        return '[blue]Security[/]'
+        return "[blue]$([char]0x26E8) Security[/]"
     }
     elseif ($Group.mailEnabled -and $Group.securityEnabled) {
-        return '[green]Mail-enabled Security[/]'
+        return "[green]$([char]0x2709) Mail-enabled Security[/]"
     }
     elseif ($Group.groupTypes -contains 'Unified') {
-        return '[magenta]Microsoft 365[/]'
+        return "[cyan]$([char]0x25A3) Microsoft 365[/]"
     }
     elseif ($Group.mailEnabled) {
-        return '[yellow]Distribution[/]'
+        return "[yellow]$([char]0x2709) Distribution[/]"
     }
     else {
-        return '[grey]Assigned Security[/]'
+        return "[grey]$([char]0x26E8) Assigned Security[/]"
     }
 }
 
@@ -42,20 +42,23 @@ function Show-InTUIGroupsView {
         Show-InTUIBreadcrumb -Path @('Home', 'Groups')
 
         $groupChoices = @(
-            'All Groups',
-            'Security Groups',
-            'Microsoft 365 Groups',
-            'Dynamic Groups',
-            'Search Groups',
-            '─────────────',
-            'Back to Home'
+            "$([char]0x2756) All Groups",
+            "$([char]0x26E8) Security Groups",
+            "$([char]0x25A3) Microsoft 365 Groups",
+            "$([char]0x21BB) Dynamic Groups",
+            "$([char]0x2315) Search Groups",
+            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
+            "$([char]0x2190) Back to Home"
         )
 
-        $selection = Show-InTUIMenu -Title "[magenta]Groups[/]" -Choices $groupChoices
+        $selection = Show-InTUIMenu -Title "[cyan]$([char]0x2756) Groups[/]" -Choices $groupChoices
 
         Write-InTUILog -Message "Groups view selection" -Context @{ Selection = $selection }
 
-        switch ($selection) {
+        # Strip icon prefix for switch matching
+        $cleanSelection = $selection -replace "^.{1,2} ", ""
+
+        switch ($cleanSelection) {
             'All Groups' {
                 Show-InTUIGroupList
             }
@@ -69,7 +72,7 @@ function Show-InTUIGroupsView {
                 Show-InTUIGroupList -TypeFilter 'Dynamic'
             }
             'Search Groups' {
-                $searchTerm = Read-SpectreText -Message "[magenta]Search groups by name[/]"
+                $searchTerm = Read-SpectreText -Message "[cyan]$([char]0x2315) Search groups by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching groups" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIGroupList -SearchTerm $searchTerm
@@ -141,7 +144,7 @@ function Show-InTUIGroupList {
             $params['Filter'] = $filter -join ' and '
         }
 
-        $groups = Show-InTUILoading -Title "[magenta]Loading groups...[/]" -ScriptBlock {
+        $groups = Show-InTUILoading -Title "[cyan]Loading groups...[/]" -ScriptBlock {
             Get-InTUIPagedResults @params
         }
 
@@ -171,7 +174,7 @@ function Show-InTUIGroupList {
 
         Show-InTUIStatusBar -Total ($groups.Count ?? $groups.Results.Count) -Showing $groups.Results.Count -FilterText ($TypeFilter ?? $SearchTerm)
 
-        $selection = Show-InTUIMenu -Title "[magenta]Select a group[/]" -Choices $menuChoices
+        $selection = Show-InTUIMenu -Title "[cyan]Select a group[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
             $exitList = $true
@@ -202,7 +205,7 @@ function Show-InTUIGroupDetail {
         Clear-Host
         Show-InTUIHeader
 
-        $group = Show-InTUILoading -Title "[magenta]Loading group details...[/]" -ScriptBlock {
+        $group = Show-InTUILoading -Title "[cyan]Loading group details...[/]" -ScriptBlock {
             Invoke-InTUIGraphRequest -Uri "/groups/$GroupId`?`$select=id,displayName,description,groupTypes,mailEnabled,securityEnabled,mailNickname,membershipRule,membershipRuleProcessingState,createdDateTime,renewedDateTime,visibility,isAssignableToRole"
         }
 
@@ -239,9 +242,9 @@ function Show-InTUIGroupDetail {
 "@
         }
 
-        Show-InTUIPanel -Title "[magenta]Group Properties[/]" -Content $propsContent -BorderColor Magenta
+        Show-InTUIPanel -Title "[cyan]Group Properties[/]" -Content $propsContent -BorderColor Cyan1
 
-        $memberCountData = Show-InTUILoading -Title "[magenta]Loading member count...[/]" -ScriptBlock {
+        $memberCountData = Show-InTUILoading -Title "[cyan]Loading member count...[/]" -ScriptBlock {
             Invoke-InTUIGraphRequest -Uri "/groups/$GroupId/members?`$top=1&`$select=id"
         }
 
@@ -264,7 +267,7 @@ function Show-InTUIGroupDetail {
         $actionChoices += '─────────────'
         $actionChoices += 'Back to Groups'
 
-        $action = Show-InTUIMenu -Title "[magenta]Group Actions[/]" -Choices $actionChoices
+        $action = Show-InTUIMenu -Title "[cyan]Group Actions[/]" -Choices $actionChoices
 
         Write-InTUILog -Message "Group detail action" -Context @{ GroupId = $GroupId; GroupName = $group.displayName; Action = $action }
 
@@ -282,7 +285,7 @@ function Show-InTUIGroupDetail {
                 Clear-Host
                 Show-InTUIHeader
                 Show-InTUIBreadcrumb -Path @('Home', 'Groups', $group.displayName, 'Membership Rule')
-                Show-InTUIPanel -Title "Dynamic Membership Rule" -Content "[cyan]$($group.membershipRule ?? 'No rule defined')[/]" -BorderColor Cyan1
+                Show-InTUIPanel -Title "Dynamic Membership Rule" -Content "[cyan]$($group.membershipRule ?? 'No rule defined')[/]" -BorderColor Cyan11
                 Write-SpectreHost "[grey]Processing State:[/] $($group.membershipRuleProcessingState ?? 'N/A')"
                 Read-InTUIKey
             }
@@ -314,7 +317,7 @@ function Show-InTUIGroupMembers {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Groups', $GroupName, 'Members')
 
-    $members = Show-InTUILoading -Title "[magenta]Loading members...[/]" -ScriptBlock {
+    $members = Show-InTUILoading -Title "[cyan]Loading members...[/]" -ScriptBlock {
         Get-InTUIPagedResults -Uri "/groups/$GroupId/members" -PageSize 50 -Select 'id,displayName,userPrincipalName,mail,jobTitle'
     }
 
@@ -329,7 +332,7 @@ function Show-InTUIGroupMembers {
         $memberType = switch ($member.'@odata.type') {
             '#microsoft.graph.user'            { '[blue]User[/]' }
             '#microsoft.graph.device'          { '[green]Device[/]' }
-            '#microsoft.graph.group'           { '[magenta]Group[/]' }
+            '#microsoft.graph.group'           { '[cyan]Group[/]' }
             '#microsoft.graph.servicePrincipal' { '[yellow]Service Principal[/]' }
             default { ($member.'@odata.type' -replace '#microsoft\.graph\.', '') }
         }
@@ -349,7 +352,7 @@ function Show-InTUIGroupMembers {
         $choices = @($userMembers | ForEach-Object { $_.displayName })
         $choices += 'Back'
 
-        $selection = Show-InTUIMenu -Title "[magenta]View user details[/]" -Choices $choices
+        $selection = Show-InTUIMenu -Title "[cyan]View user details[/]" -Choices $choices
         if ($selection -ne 'Back') {
             $selectedUser = $userMembers | Where-Object { $_.displayName -eq $selection }
             if ($selectedUser) {
@@ -380,7 +383,7 @@ function Show-InTUIGroupOwners {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Groups', $GroupName, 'Owners')
 
-    $owners = Show-InTUILoading -Title "[magenta]Loading owners...[/]" -ScriptBlock {
+    $owners = Show-InTUILoading -Title "[cyan]Loading owners...[/]" -ScriptBlock {
         Invoke-InTUIGraphRequest -Uri "/groups/$GroupId/owners?`$select=id,displayName,userPrincipalName,mail"
     }
 
@@ -421,7 +424,7 @@ function Show-InTUIGroupDeviceMembers {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Groups', $GroupName, 'Device Members')
 
-    $members = Show-InTUILoading -Title "[magenta]Loading device members...[/]" -ScriptBlock {
+    $members = Show-InTUILoading -Title "[cyan]Loading device members...[/]" -ScriptBlock {
         Get-InTUIPagedResults -Uri "/groups/$GroupId/members/microsoft.graph.device" -PageSize 50 -Select 'id,displayName,operatingSystem,operatingSystemVersion,trustType,isManaged'
     }
 

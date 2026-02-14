@@ -11,19 +11,23 @@ function Show-InTUIDashboard {
     $dashData = Show-InTUILoading -Title "[blue]Loading dashboard data...[/]" -ScriptBlock {
         $countHeaders = @{ ConsistencyLevel = 'eventual' }
         $devices = Invoke-InTUIGraphRequest -Uri '/deviceManagement/managedDevices?$top=1&$select=id&$count=true' -Beta -Headers $countHeaders
-        $apps = Invoke-InTUIGraphRequest -Uri '/deviceAppManagement/mobileApps?$top=1&$select=id&$count=true' -Beta -Headers $countHeaders
         $users = Invoke-InTUIGraphRequest -Uri '/users?$top=1&$select=id&$count=true' -Headers $countHeaders
         $groups = Invoke-InTUIGraphRequest -Uri '/groups?$top=1&$select=id&$count=true' -Headers $countHeaders
+
+        # mobileApps doesn't support $count properly, so fetch all IDs to count
+        $apps = Invoke-InTUIGraphRequest -Uri '/deviceAppManagement/mobileApps?$select=id' -Beta -All
 
         $compliance = Invoke-InTUIGraphRequest -Uri '/deviceManagement/deviceCompliancePolicyDeviceStateSummary' -Beta
 
         @{
             DeviceCount       = $devices.'@odata.count' ?? @($devices.value).Count
-            AppCount          = $apps.'@odata.count' ?? @($apps.value).Count
+            AppCount          = @($apps).Count
             UserCount         = $users.'@odata.count' ?? @($users.value).Count
             GroupCount        = $groups.'@odata.count' ?? @($groups.value).Count
-            CompliantCount    = $compliance.compliantDeviceCount ?? '?'
-            NoncompliantCount = $compliance.nonCompliantDeviceCount ?? '?'
+            CompliantCount    = $compliance.compliantDeviceCount ?? 0
+            NoncompliantCount = $compliance.nonCompliantDeviceCount ?? 0
+            InGracePeriod     = $compliance.inGracePeriodCount ?? 0
+            ErrorCount        = $compliance.errorCount ?? 0
         }
     }
 
@@ -40,28 +44,54 @@ function Show-InTUIDashboard {
         Groups = $dashData.GroupCount
     }
 
+    # Calculate compliance percentage for progress bar
+    $totalDevices = [int]$dashData.CompliantCount + [int]$dashData.NoncompliantCount + [int]$dashData.InGracePeriod + [int]$dashData.ErrorCount
+    $compliancePercent = if ($totalDevices -gt 0) { [Math]::Round(([int]$dashData.CompliantCount / $totalDevices) * 100, 1) } else { 0 }
+    $complianceBar = Get-InTUIProgressBar -Percentage $compliancePercent -Width 25
+
+    # Device panel with enhanced visuals
     $devicePanel = Format-SpectrePanel -Data @"
-[white bold]$($dashData.DeviceCount)[/] managed devices
-[green]$($dashData.CompliantCount)[/] compliant
-[red]$($dashData.NoncompliantCount)[/] non-compliant
-"@ -Title "[blue]Devices[/]" -Color Blue
+  $([char]0x25A0) [white bold]$($dashData.DeviceCount)[/] [grey]managed devices[/]
 
+  [bold]Compliance Status[/]
+  $complianceBar [white]$compliancePercent%[/]
+
+  [green]$([char]0x25CF)[/] Compliant       [white bold]$($dashData.CompliantCount)[/]
+  [red]$([char]0x25CF)[/] Non-compliant   [white bold]$($dashData.NoncompliantCount)[/]
+  [yellow]$([char]0x25CF)[/] Grace Period    [white bold]$($dashData.InGracePeriod)[/]
+  [red]$([char]0x25CF)[/] Error           [white bold]$($dashData.ErrorCount)[/]
+"@ -Title "[blue]$([char]0x2630) Devices[/]" -Color Blue
+
+    # App panel with icon
     $appPanel = Format-SpectrePanel -Data @"
-[white bold]$($dashData.AppCount)[/] applications
-"@ -Title "[green]Apps[/]" -Color Green
+  $([char]0x25A3) [white bold]$($dashData.AppCount)[/] [grey]applications[/]
 
+  [grey dim]Managed apps across all platforms[/]
+"@ -Title "[green]$([char]0x25A6) Apps[/]" -Color Green
+
+    # User panel with icon
     $userPanel = Format-SpectrePanel -Data @"
-[white bold]$($dashData.UserCount)[/] users
-"@ -Title "[yellow]Users[/]" -Color Yellow
+  $([char]0x263A) [white bold]$($dashData.UserCount)[/] [grey]users[/]
 
+  [grey dim]Azure AD directory users[/]
+"@ -Title "[yellow]$([char]0x26AB) Users[/]" -Color Yellow
+
+    # Group panel with icon
     $groupPanel = Format-SpectrePanel -Data @"
-[white bold]$($dashData.GroupCount)[/] groups
-"@ -Title "[magenta]Groups[/]" -Color Magenta1
+  $([char]0x2687) [white bold]$($dashData.GroupCount)[/] [grey]groups[/]
+
+  [grey dim]Security and distribution groups[/]
+"@ -Title "[cyan]$([char]0x2756) Groups[/]" -Color Cyan1
 
     $devicePanel | Out-SpectreHost
     $appPanel | Out-SpectreHost
     $userPanel | Out-SpectreHost
     $groupPanel | Out-SpectreHost
+
+    # Quick stats footer
+    Write-SpectreHost ""
+    Write-SpectreHost "[grey dim]$(([string][char]0x2500) * 60)[/]"
+    Write-SpectreHost "[grey]Quick Stats:[/] [blue]$([char]0x25B6)[/] [white]$($dashData.DeviceCount)[/] devices  [green]$([char]0x25B6)[/] [white]$($dashData.AppCount)[/] apps  [yellow]$([char]0x25B6)[/] [white]$($dashData.UserCount)[/] users  [cyan]$([char]0x25B6)[/] [white]$($dashData.GroupCount)[/] groups"
     Write-SpectreHost ""
 }
 

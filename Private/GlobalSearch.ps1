@@ -124,10 +124,10 @@ function Invoke-InTUIGlobalSearch {
 
         # Add groups
         if ($results.Groups.Count -gt 0) {
-            $resultChoices += "[magenta]--- Groups ($($results.Groups.Count)) ---[/]"
+            $resultChoices += "[cyan]--- Groups ($($results.Groups.Count)) ---[/]"
             foreach ($group in $results.Groups) {
                 $desc = if ($group.description) { $group.description.Substring(0, [Math]::Min(30, $group.description.Length)) } else { 'No description' }
-                $choice = "[magenta]G[/] [white]$(ConvertTo-InTUISafeMarkup -Text $group.displayName)[/] [grey]| $desc[/]"
+                $choice = "[cyan]G[/] [white]$(ConvertTo-InTUISafeMarkup -Text $group.displayName)[/] [grey]| $desc[/]"
                 $resultChoices += $choice
                 $resultMap[$choice] = @{ Type = 'Group'; Id = $group.id; Name = $group.displayName }
             }
