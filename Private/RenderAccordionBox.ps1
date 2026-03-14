@@ -36,6 +36,7 @@ function Render-InTUIAccordionBox {
     $innerWidth = Get-InTUIConsoleInnerWidth
     $border = [char]0x2502
     $hLine = [char]0x2500
+    $maxRow = [Console]::BufferHeight - 1
 
     $collapsedChar = [char]0x25B8  # right-pointing triangle
     $expandedChar  = [char]0x25BE  # down-pointing triangle
@@ -52,6 +53,8 @@ function Render-InTUIAccordionBox {
 
     $row = $AnchorTop
 
+    try {
+
     # Empty line inside box
     $emptyLine = '  {0}{1}{2}{3}{4}' -f $palette.SurfaceFg, $border, (' ' * $innerWidth), $border, $reset
     [Console]::SetCursorPosition(0, $row)
@@ -60,6 +63,7 @@ function Render-InTUIAccordionBox {
 
     # Render each row
     for ($i = 0; $i -lt $Rows.Count; $i++) {
+        if ($row -gt $maxRow) { break }
         [Console]::SetCursorPosition(0, $row)
 
         $currentRow = $Rows[$i]
@@ -168,17 +172,18 @@ function Render-InTUIAccordionBox {
     $row++
 
     # Clear one trailing line to avoid stale artifacts
-    try {
-        if ($row -lt [Console]::BufferHeight) {
-            $windowWidth = [Console]::WindowWidth
-            if ($windowWidth -gt 1) {
-                [Console]::SetCursorPosition(0, $row)
-                [Console]::Write(' ' * ($windowWidth - 1))
-            }
+    if ($row -lt [Console]::BufferHeight) {
+        $windowWidth = [Console]::WindowWidth
+        if ($windowWidth -gt 1) {
+            [Console]::SetCursorPosition(0, $row)
+            [Console]::Write(' ' * ($windowWidth - 1))
         }
     }
-    catch { }
+
+    } catch [System.ArgumentOutOfRangeException] {
+        # Terminal too small for full accordion — render truncated gracefully
+    }
 
     # Move cursor below the box
-    [Console]::SetCursorPosition(0, $row)
+    try { [Console]::SetCursorPosition(0, [math]::Min($row, $maxRow)) } catch { }
 }

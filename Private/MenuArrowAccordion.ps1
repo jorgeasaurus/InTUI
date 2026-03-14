@@ -97,6 +97,28 @@ function Show-InTUIMenuArrowAccordion {
 
     $rows = Build-InTUIAccordionRows -Sections $Sections -ExpandedIndex $expandedIndex
 
+    # Ensure enough buffer space for the accordion at max expansion
+    # (all parents collapsed + largest section's children expanded + footer lines)
+    $maxChildren = 0
+    foreach ($sec in $Sections) {
+        $ch = if ($sec.Children) { $sec.Children } elseif ($sec.Items) { $sec.Items } else { @() }
+        if ($ch.Count -gt $maxChildren) { $maxChildren = $ch.Count }
+    }
+    $neededRows = $Sections.Count + $maxChildren + 6
+    $bufferHeight = [Console]::BufferHeight
+    $available = $bufferHeight - $anchorTop
+
+    if ($available -lt $neededRows) {
+        $scrollAmount = [math]::Min($neededRows - $available, [math]::Max(0, $anchorTop - 3))
+        if ($scrollAmount -gt 0) {
+            [Console]::SetCursorPosition(0, $bufferHeight - 1)
+            for ($s = 0; $s -lt $scrollAmount; $s++) {
+                [Console]::Write("`n")
+            }
+            $anchorTop -= $scrollAmount
+        }
+    }
+
     try {
         try { [Console]::CursorVisible = $false } catch { }
 
