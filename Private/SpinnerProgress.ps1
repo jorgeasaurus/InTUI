@@ -43,8 +43,9 @@ function Write-InTUISpinnerComplete {
 
     $palette = Get-InTUIColorPalette
     $reset = $palette.Reset
+    $clearWidth = [math]::Max(80, [Console]::WindowWidth - 1)
 
-    Write-Host "`r$(' ' * 80)`r$($palette.Green)+$reset $Message"
+    Write-Host "`r$(' ' * $clearWidth)`r$($palette.Green)+$reset $Message"
 }
 
 function Invoke-InTUIWithSpinner {

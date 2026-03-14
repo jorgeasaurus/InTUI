@@ -48,8 +48,8 @@ function Show-InTUIMenuArrowMulti {
     $itemCount = $Choices.Count
     $checked = [bool[]]::new($itemCount)
 
-    # Viewport sizing
-    $chromeRows = 5
+    # Viewport sizing (chrome = empty + empty + separator + hint + bottom-border + cursor-below)
+    $chromeRows = 6
 
     # Ensure buffer has room for items + chrome before computing viewport
     $anchorTop = Ensure-InTUIBufferSpace -AnchorTop $anchorTop -NeededRows ([math]::Min($itemCount, $PageSize) + $chromeRows)

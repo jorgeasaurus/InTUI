@@ -346,8 +346,7 @@ function Invoke-InTUIDeviceAction {
 
     Write-InTUILog -Message "Executing device action" -Context @{ DeviceId = $DeviceId; Action = $Action }
 
-    # Track if an error occurred via script variable
-    $script:LastActionError = $false
+    $script:LastActionError = $true
 
     Show-InTUILoading -Title "[blue]Executing $Action...[/]" -ScriptBlock {
         $params = @{
@@ -358,18 +357,17 @@ function Invoke-InTUIDeviceAction {
         if ($Body) { $params['Body'] = $Body }
 
         $result = Invoke-InTUIGraphRequest @params
-        # Invoke-InTUIGraphRequest returns null on both success (204) and error
-        # But it prints "Graph API Error:" on errors, so we need another way to detect
-        # If it returns non-null, it definitely succeeded
-        if ($null -ne $result) {
-            $script:LastActionError = $false
-        }
+        $script:LastActionError = ($null -eq $result)
     }
 
-    # For POST actions, assume success unless error was printed
-    # The user will see the Graph API Error message if there was one
-    Write-InTUILog -Message "Device action initiated" -Context @{ DeviceId = $DeviceId; Action = $Action }
-    Show-InTUISuccess "Action '$Action' has been initiated. Check the device for status."
+    if ($script:LastActionError) {
+        Write-InTUILog -Level 'ERROR' -Message "Device action failed" -Context @{ DeviceId = $DeviceId; Action = $Action }
+        Show-InTUIWarning "Action '$Action' failed. See error above."
+    }
+    else {
+        Write-InTUILog -Message "Device action initiated" -Context @{ DeviceId = $DeviceId; Action = $Action }
+        Show-InTUISuccess "Action '$Action' has been initiated. Check the device for status."
+    }
     Read-InTUIKey
 }
 

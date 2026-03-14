@@ -50,8 +50,8 @@ function Show-InTUIMenuArrowSingle {
     $selectedIndex = 0
     $itemCount = $Choices.Count
 
-    # Viewport: chrome rows = top-empty + bottom-empty + separator + hint + bottom-border
-    $chromeRows = 5
+    # Viewport: chrome rows = top-empty + bottom-empty + separator + hint + bottom-border + cursor-below
+    $chromeRows = 6
 
     # Ensure buffer has room for items + chrome before computing viewport
     $anchorTop = Ensure-InTUIBufferSpace -AnchorTop $anchorTop -NeededRows ([math]::Min($itemCount, $PageSize) + $chromeRows)
