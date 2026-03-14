@@ -2,86 +2,84 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Test: Run Pester Tests",
+            "label": "Bootstrap: Install Dependencies",
             "type": "shell",
             "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "Invoke-Pester -Path '${workspaceFolder}/Tests' -Output Detailed"
-            ],
-            "group": {
-                "kind": "test",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
+            "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1"],
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
             "problemMatcher": []
         },
         {
-            "label": "Analyze: PSScriptAnalyzer",
+            "label": "Build: Analyze (PSScriptAnalyzer)",
             "type": "shell",
             "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "Invoke-ScriptAnalyzer -Path '${workspaceFolder}' -Recurse -ExcludeRule PSAvoidUsingWriteHost"
-            ],
+            "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "Analyze"],
             "group": "build",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build: Test (Pester)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "Test"],
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build: Build Module",
+            "type": "shell",
+            "command": "pwsh",
+            "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "Build"],
+            "group": { "kind": "build", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build: Full CI (Analyze + Test + Build)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "CI"],
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build: Clean",
+            "type": "shell",
+            "command": "pwsh",
+            "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "Clean"],
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
             "problemMatcher": []
         },
         {
             "label": "Module: Import Local",
             "type": "shell",
             "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "Import-Module '${workspaceFolder}/InTUI.psd1' -Force -Verbose"
-            ],
+            "args": ["-NoProfile", "-Command", "Import-Module \"${workspaceFolder}/InTUI.psd1\" -Force -Verbose"],
             "group": "none",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
+            "presentation": { "reveal": "always", "panel": "shared" },
             "problemMatcher": []
         },
         {
             "label": "Module: Get Version",
             "type": "shell",
             "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "(Import-PowerShellDataFile '${workspaceFolder}/InTUI.psd1').ModuleVersion"
-            ],
+            "args": ["-NoProfile", "-Command", "(Import-PowerShellDataFile ./InTUI.psd1).ModuleVersion"],
             "group": "none",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
+            "presentation": { "reveal": "always", "panel": "shared" },
             "problemMatcher": []
         },
         {
-            "label": "Run: Start InTUI",
+            "label": "Module: Launch InTUI (SkipConnect)",
             "type": "shell",
             "command": "pwsh",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "Import-Module '${workspaceFolder}/InTUI.psd1' -Force; Start-InTUI"
-            ],
+            "args": ["-NoProfile", "-Command", "Import-Module \"${workspaceFolder}/InTUI.psd1\" -Force; Start-InTUI -SkipConnect"],
             "group": "none",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared"
-            },
+            "presentation": { "reveal": "always", "panel": "shared", "focus": true },
             "problemMatcher": []
         }
     ]

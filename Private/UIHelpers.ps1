@@ -1,24 +1,36 @@
 function Show-InTUIHeader {
     <#
     .SYNOPSIS
-        Displays the InTUI header banner with ASCII art.
+        Displays the InTUI header banner with gradient-bordered ASCII art.
     #>
     [CmdletBinding()]
     param(
         [string]$Subtitle
     )
 
-    # ASCII art banner
-    $banner = @"
-[blue]  ___       _____  _   _  ___ [/]
-[blue] |_ _|_ __ |_   _|| | | ||_ _|[/]
-[blue]  | || '_ \  | |  | | | | | | [/]
-[blue]  | || | | | | |  | |_| | | | [/]
-[blue] |___|_| |_| |_|   \___/ |___|[/]
-"@
-    Write-SpectreHost $banner
-    Write-SpectreHost "[grey dim]Intune Terminal User Interface[/]"
-    Write-SpectreHost ""
+    $palette = Get-InTUIColorPalette
+    $reset = $palette.Reset
+
+    # Gradient-decorated top border
+    $gradientTop = Get-InTUIGradientLine -Character ([char]0x2500) -Width 40
+    Write-Host $gradientTop
+
+    # ASCII art banner with gradient
+    $bannerLines = @(
+        '██╗███╗   ██╗████████╗██╗   ██╗██╗'
+        '██║████╗  ██║╚══██╔══╝██║   ██║██║'
+        '██║██╔██╗ ██║   ██║   ██║   ██║██║'
+        '██║██║╚██╗██║   ██║   ██║   ██║██║'
+        '██║██║ ╚████║   ██║   ╚██████╔╝██║'
+        '╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝'
+    )
+    foreach ($line in $bannerLines) {
+        $gradientLine = Get-InTUIGradientString -Text $line
+        Write-Host $gradientLine
+    }
+
+    Write-Host "$($palette.Dim)Intune Terminal User Interface$reset"
+    Write-Host ""
 
     if ($script:Connected) {
         $tenant = if ($script:TenantId) { $script:TenantId } else { 'Unknown' }
@@ -26,15 +38,19 @@ function Show-InTUIHeader {
         $envLabel = if ($script:CloudEnvironments -and $script:CloudEnvironment) {
             $script:CloudEnvironments[$script:CloudEnvironment].Label
         } else { 'Global' }
-        Write-SpectreHost "[grey]$([char]0x25CF)[/] [grey]Tenant:[/] [cyan]$tenant[/]  [grey]$([char]0x25CF)[/] [grey]Account:[/] [cyan]$account[/]  [grey]$([char]0x25CF)[/] [grey]Env:[/] [cyan]$envLabel[/]"
+        Write-InTUIText "[grey]Env:[/] [cyan]$envLabel[/]"
+        Write-InTUIText "[grey]Tenant:[/] [cyan]$tenant[/]"
+        Write-InTUIText "[grey]Account:[/] [cyan]$account[/]"
     }
 
     if ($Subtitle) {
-        Write-SpectreHost "[grey]$Subtitle[/]"
+        Write-InTUIText "[grey]$Subtitle[/]"
     }
 
-    Write-SpectreHost "[grey dim]$(([string][char]0x2500) * 60)[/]"
-    Write-SpectreHost ""
+    # Gradient bottom border
+    $gradientBottom = Get-InTUIGradientLine -Character ([char]0x2500) -Width 60
+    Write-Host $gradientBottom
+    Write-Host ""
 }
 
 function Show-InTUIBreadcrumb {
@@ -48,22 +64,16 @@ function Show-InTUIBreadcrumb {
         [string[]]$Path
     )
 
-    $separator = " [grey]$([char]0x25B8)[/] "
-    $homeIcon = "[cyan]$([char]0x2302)[/]"
+    $separator = " [grey]>[/] "
 
     $pathItems = @()
     for ($i = 0; $i -lt $Path.Count; $i++) {
-        if ($i -eq 0) {
-            $pathItems += "$homeIcon [blue]$($Path[$i])[/]"
-        }
-        else {
-            $pathItems += "[blue]$($Path[$i])[/]"
-        }
+        $pathItems += "[blue]$($Path[$i])[/]"
     }
 
     $breadcrumb = $pathItems -join $separator
-    Write-SpectreHost $breadcrumb
-    Write-SpectreHost ""
+    Write-InTUIText $breadcrumb
+    Write-Host ""
 }
 
 function Show-InTUIStatusBar {
@@ -87,7 +97,7 @@ function Show-InTUIStatusBar {
     if ($FilterText) {
         $status += " [grey]| Filter: [yellow]$FilterText[/][/]"
     }
-    Write-SpectreHost $status
+    Write-InTUIText $status
 }
 
 function Read-InTUIKey {
@@ -95,14 +105,16 @@ function Read-InTUIKey {
     .SYNOPSIS
         Reads a key press and returns the key info.
     #>
-    Write-SpectreHost "[grey]Press any key to continue...[/]"
+    Write-InTUIText "[grey]Press any key to continue...[/]"
     $null = [Console]::ReadKey($true)
 }
 
 function Show-InTUIMenu {
     <#
     .SYNOPSIS
-        Displays a selection menu using Spectre Console and returns the selected option.
+        Displays a selection menu and returns the selected option string.
+        Routes to arrow-key or classic menu based on capability.
+        Returns the original choice string for backward-compatible switch matching.
     #>
     [CmdletBinding()]
     param(
@@ -119,7 +131,58 @@ function Show-InTUIMenu {
         [int]$PageSize = 15
     )
 
-    Read-SpectreSelection -Title $Title -Choices $Choices -Color $Color -PageSize $PageSize
+    if ($script:HasArrowKeySupport) {
+        $result = Show-InTUIMenuArrowSingle -Title $Title -Choices $Choices -PageSize $PageSize
+    }
+    else {
+        $result = Show-InTUIMenuClassic -Title $Title -Choices $Choices
+    }
+
+    if ($result -eq 'Back') {
+        # Escape pressed: find a Back/Cancel choice so the caller's switch exits naturally
+        $backChoice = $Choices | Where-Object { $_ -match '^Back' } | Select-Object -Last 1
+        return $backChoice  # $null if no back choice exists (e.g. main menu)
+    }
+    if ($result -is [int] -and $result -ge 0 -and $result -lt $Choices.Count) {
+        return $Choices[$result]
+    }
+    return $null
+}
+
+function Show-InTUIMultiSelect {
+    <#
+    .SYNOPSIS
+        Multi-selection menu wrapper. Returns selected choice strings.
+        Replaces Read-SpectreMultiSelection.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Title,
+
+        [Parameter(Mandatory)]
+        [string[]]$Choices,
+
+        [Parameter()]
+        [int]$PageSize = 15
+    )
+
+    if ($script:HasArrowKeySupport) {
+        $indices = Show-InTUIMenuArrowMulti -Title $Title -Choices $Choices -PageSize $PageSize
+    }
+    else {
+        $indices = Show-InTUIMenuClassic -Title $Title -Choices $Choices -MultiSelect
+    }
+
+    if (-not $indices -or $indices.Count -eq 0) { return @() }
+
+    $selected = @()
+    foreach ($idx in $indices) {
+        if ($idx -ge 0 -and $idx -lt $Choices.Count) {
+            $selected += $Choices[$idx]
+        }
+    }
+    return $selected
 }
 
 function Get-InTUIChoiceMap {
@@ -164,13 +227,13 @@ function Show-InTUIConfirm {
         [string]$Message
     )
 
-    Read-SpectreConfirm -Prompt $Message
+    Read-InTUIConfirmInput -Message $Message
 }
 
 function Show-InTUIPanel {
     <#
     .SYNOPSIS
-        Displays content in a Spectre panel.
+        Displays content in a bordered panel.
     #>
     [CmdletBinding()]
     param(
@@ -184,13 +247,13 @@ function Show-InTUIPanel {
         [string]$BorderColor = 'Blue'
     )
 
-    Format-SpectrePanel -Data $Content -Title $Title -Color $BorderColor | Out-SpectreHost
+    Render-InTUIPanel -Content $Content -Title $Title -BorderColor $BorderColor
 }
 
 function Show-InTUITable {
     <#
     .SYNOPSIS
-        Creates and displays a formatted Spectre table.
+        Creates and displays a formatted table.
     #>
     [CmdletBinding()]
     param(
@@ -207,16 +270,7 @@ function Show-InTUITable {
         [string]$BorderColor = 'Blue'
     )
 
-    $tableData = [System.Collections.Generic.List[PSCustomObject]]::new()
-    foreach ($row in $Rows) {
-        $obj = [ordered]@{}
-        for ($i = 0; $i -lt $Columns.Count; $i++) {
-            $obj[$Columns[$i]] = if ($i -lt $row.Count) { $row[$i] } else { '' }
-        }
-        $tableData.Add([PSCustomObject]$obj)
-    }
-
-    $tableData | Format-SpectreTable -Title $Title -Color $BorderColor -AllowMarkup
+    Render-InTUITable -Title $Title -Columns $Columns -Rows $Rows -BorderColor $BorderColor
 }
 
 function Show-InTUILoading {
@@ -233,7 +287,7 @@ function Show-InTUILoading {
         [scriptblock]$ScriptBlock
     )
 
-    Invoke-SpectreCommandWithStatus -Title $Title -ScriptBlock $ScriptBlock
+    Invoke-InTUIWithSpinner -Title $Title -ScriptBlock $ScriptBlock
 }
 
 function Show-InTUIError {
@@ -247,7 +301,7 @@ function Show-InTUIError {
         [string]$Message
     )
 
-    Format-SpectrePanel -Data "[red]$Message[/]" -Title "[red]Error[/]" -Color Red | Out-SpectreHost
+    Render-InTUIPanel -Content "[red]$Message[/]" -Title "[red]Error[/]" -BorderColor 'Red'
 }
 
 function Show-InTUISuccess {
@@ -261,7 +315,7 @@ function Show-InTUISuccess {
         [string]$Message
     )
 
-    Write-SpectreHost "[green]✓[/] $Message"
+    Write-InTUIText "[green]+[/] $Message"
 }
 
 function Show-InTUIWarning {
@@ -275,7 +329,7 @@ function Show-InTUIWarning {
         [string]$Message
     )
 
-    Write-SpectreHost "[yellow]$([char]0x26A0)[/] $Message"
+    Write-InTUIText "[yellow]![/] $Message"
 }
 
 function Show-InTUIInfo {
@@ -289,13 +343,13 @@ function Show-InTUIInfo {
         [string]$Message
     )
 
-    Write-SpectreHost "[blue]$([char]0x2139)[/] $Message"
+    Write-InTUIText "[blue]*[/] $Message"
 }
 
 function Get-InTUIProgressBar {
     <#
     .SYNOPSIS
-        Returns a text-based progress bar.
+        Returns a text-based progress bar with markup.
     #>
     [CmdletBinding()]
     param(
@@ -326,7 +380,7 @@ function Get-InTUIProgressBar {
 function Show-InTUISectionHeader {
     <#
     .SYNOPSIS
-        Displays a decorative section header.
+        Displays a gradient-decorated section divider.
     #>
     [CmdletBinding()]
     param(
@@ -341,16 +395,18 @@ function Show-InTUISectionHeader {
     )
 
     $iconDisplay = if ($Icon) { "$Icon " } else { "" }
-    $line = [char]0x2550 * 3
-    Write-SpectreHost ""
-    Write-SpectreHost "[$Color]$line $iconDisplay$Title $line[/]"
-    Write-SpectreHost ""
+    $fullTitle = "$iconDisplay$Title"
+
+    Write-Host ""
+    $gradientLine = Get-InTUIGradientString -Text "--- $fullTitle ---"
+    Write-Host $gradientLine
+    Write-Host ""
 }
 
 function Get-InTUIStatusBadge {
     <#
     .SYNOPSIS
-        Returns a colored status badge.
+        Returns a colored status badge markup string.
     #>
     [CmdletBinding()]
     param(
@@ -380,7 +436,7 @@ function Get-InTUIStatusBadge {
         }
     }
 
-    return "[$badgeColor]$([char]0x25CF) $Status[/]"
+    return "[$badgeColor]* $Status[/]"
 }
 
 function Get-InTUIAppIcon {
@@ -395,14 +451,14 @@ function Get-InTUIAppIcon {
     )
 
     switch -Wildcard ($AppType) {
-        '*win32*'           { return '[blue]$([char]0x2B1B)[/]' }
-        '*msi*'             { return '[blue]$([char]0x229E)[/]' }
-        '*ios*'             { return '[grey]$([char]0x25C9)[/]' }
-        '*android*'         { return '[green]$([char]0x25B2)[/]' }
-        '*web*'             { return '[cyan]$([char]0x1F310)[/]' }
-        '*office*'          { return '[orange1]$([char]0x25A3)[/]' }
-        '*microsoft*'       { return '[blue]$([char]0x25A0)[/]' }
-        default             { return '[grey]$([char]0x25A1)[/]' }
+        '*win32*'           { return '[blue]W[/]' }
+        '*msi*'             { return '[blue]M[/]' }
+        '*ios*'             { return '[grey]i[/]' }
+        '*android*'         { return '[green]A[/]' }
+        '*web*'             { return '[cyan]w[/]' }
+        '*office*'          { return '[orange]O[/]' }
+        '*microsoft*'       { return '[blue]M[/]' }
+        default             { return '[grey]-[/]' }
     }
 }
 
@@ -421,13 +477,13 @@ function Get-InTUIUserIcon {
     )
 
     if ($IsAdmin) {
-        return '[yellow]$([char]0x2605)[/]'  # Star for admin
+        return '[yellow]*[/]'
     }
     elseif ($AccountEnabled -eq 'true') {
-        return '[green]$([char]0x25CF)[/]'   # Filled circle for enabled
+        return '[green]+[/]'
     }
     else {
-        return '[red]$([char]0x25CB)[/]'     # Empty circle for disabled
+        return '[red]-[/]'
     }
 }
 
@@ -449,26 +505,26 @@ function Get-InTUIGroupIcon {
     )
 
     if ($SecurityEnabled -eq 'true' -and $MailEnabled -eq 'true') {
-        return '[cyan]$([char]0x29C9)[/]'   # Mail-enabled security group
+        return '[cyan]SM[/]'
     }
     elseif ($SecurityEnabled -eq 'true') {
-        return '[blue]$([char]0x26E8)[/]'      # Security group (shield)
+        return '[blue]S[/]'
     }
     elseif ($MailEnabled -eq 'true') {
-        return '[cyan]$([char]0x2709)[/]'      # Distribution group (envelope)
+        return '[cyan]@[/]'
     }
     elseif ($GroupType -match 'DynamicMembership') {
-        return '[yellow]$([char]0x21BB)[/]'    # Dynamic group (circular arrow)
+        return '[yellow]D[/]'
     }
     else {
-        return '[grey]$([char]0x25A6)[/]'      # Generic group
+        return '[grey]G[/]'
     }
 }
 
 function Show-InTUIBoxedText {
     <#
     .SYNOPSIS
-        Displays text in a decorative box.
+        Displays text in a decorative Unicode box.
     #>
     [CmdletBinding()]
     param(
@@ -479,6 +535,18 @@ function Show-InTUIBoxedText {
         [string]$Color = 'blue'
     )
 
+    $palette = Get-InTUIColorPalette
+    $reset = $palette.Reset
+
+    $colorAnsi = switch ($Color.ToLower()) {
+        'blue'   { $palette.Blue }
+        'green'  { $palette.Green }
+        'red'    { $palette.Red }
+        'yellow' { $palette.Yellow }
+        'cyan'   { $palette.Cyan }
+        default  { $palette.Blue }
+    }
+
     $topLeft = [char]0x256D
     $topRight = [char]0x256E
     $bottomLeft = [char]0x2570
@@ -487,18 +555,19 @@ function Show-InTUIBoxedText {
     $vertical = [char]0x2502
 
     $padding = 2
-    $textLength = ($Text -replace '\[[^\]]+\]', '').Length
+    $textLength = Measure-InTUIDisplayWidth -Text (Strip-InTUIMarkup -Text $Text)
     $boxWidth = $textLength + ($padding * 2)
 
-    Write-SpectreHost "[$Color]$topLeft$($horizontal * $boxWidth)$topRight[/]"
-    Write-SpectreHost "[$Color]$vertical[/]$(' ' * $padding)$Text$(' ' * $padding)[$Color]$vertical[/]"
-    Write-SpectreHost "[$Color]$bottomLeft$($horizontal * $boxWidth)$bottomRight[/]"
+    $ansiText = ConvertFrom-InTUIMarkup -Text $Text
+    Write-Host "$colorAnsi$topLeft$([string]::new($horizontal, $boxWidth))$topRight$reset"
+    Write-Host "$colorAnsi$vertical$reset$(' ' * $padding)$ansiText$(' ' * $padding)$colorAnsi$vertical$reset"
+    Write-Host "$colorAnsi$bottomLeft$([string]::new($horizontal, $boxWidth))$bottomRight$reset"
 }
 
 function Show-InTUISparkline {
     <#
     .SYNOPSIS
-        Displays a sparkline chart from an array of values.
+        Returns a sparkline chart markup string from an array of values.
     #>
     [CmdletBinding()]
     param(
@@ -560,11 +629,9 @@ function Get-InTUIConfigProfileType {
     }
 }
 
-function ConvertTo-InTUISafeMarkup {
+function Protect-InTUIMarkup {
     <#
     .SYNOPSIS
-        Escapes text for safe use in Spectre Console markup.
-    .DESCRIPTION
         Escapes brackets so they are displayed literally instead of being
         interpreted as markup tags.
     #>
@@ -581,3 +648,6 @@ function ConvertTo-InTUISafeMarkup {
 
     return $Text -replace '\[', '[[' -replace '\]', ']]'
 }
+
+# Keep backward-compatible alias
+Set-Alias -Name ConvertTo-InTUISafeMarkup -Value Protect-InTUIMarkup

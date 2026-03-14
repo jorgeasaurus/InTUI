@@ -6,6 +6,7 @@ $script:InTUIConfig = @{
     DefaultExportPath = $PWD
     CacheEnabled    = $true
     CacheTTL        = 300
+    Theme           = 'Mocha'
 }
 
 function Initialize-InTUIConfig {
@@ -24,6 +25,7 @@ function Initialize-InTUIConfig {
             if ($saved.DefaultExportPath) { $script:InTUIConfig.DefaultExportPath = $saved.DefaultExportPath }
             if ($null -ne $saved.CacheEnabled) { $script:InTUIConfig.CacheEnabled = $saved.CacheEnabled; $script:CacheEnabled = $saved.CacheEnabled }
             if ($saved.CacheTTL) { $script:InTUIConfig.CacheTTL = $saved.CacheTTL; $script:CacheTTL = $saved.CacheTTL }
+            if ($saved.Theme) { $script:InTUIConfig.Theme = $saved.Theme }
             Write-InTUILog -Message "Configuration loaded" -Context @{ Path = $script:ConfigPath }
         }
         catch {
@@ -70,6 +72,7 @@ function Show-InTUISettings {
 [grey]Default Export Path:[/] [white]$($script:InTUIConfig.DefaultExportPath)[/]
 [grey]Cache Enabled:[/]      [white]$($script:CacheEnabled)[/]
 [grey]Cache TTL:[/]          [white]$($script:CacheTTL)s[/]
+[grey]Theme:[/]              [white]$($script:InTUIConfig.Theme)[/]
 [grey]Config File:[/]        [white]$($script:ConfigPath)[/]
 "@
 
@@ -83,6 +86,7 @@ function Show-InTUISettings {
             'Change Cache TTL',
             'Clear Cache',
             'View Cache Stats',
+            'Change Theme',
             'Reset to Defaults',
             '─────────────',
             'Back'
@@ -94,7 +98,7 @@ function Show-InTUISettings {
 
         switch ($selection) {
             'Change Page Size' {
-                $newSize = Read-SpectreText -Message "[blue]Page size (10-100)[/]" -DefaultAnswer "$($script:InTUIConfig.PageSize)"
+                $newSize = Read-InTUITextInput -Message "[blue]Page size (10-100)[/]" -DefaultAnswer "$($script:InTUIConfig.PageSize)"
                 $parsed = 0
                 if ([int]::TryParse($newSize, [ref]$parsed) -and $parsed -ge 10 -and $parsed -le 100) {
                     $script:InTUIConfig.PageSize = $parsed
@@ -108,7 +112,7 @@ function Show-InTUISettings {
                 Read-InTUIKey
             }
             'Change Refresh Interval' {
-                $newInterval = Read-SpectreText -Message "[blue]Refresh interval in seconds (10-300)[/]" -DefaultAnswer "$($script:InTUIConfig.RefreshInterval)"
+                $newInterval = Read-InTUITextInput -Message "[blue]Refresh interval in seconds (10-300)[/]" -DefaultAnswer "$($script:InTUIConfig.RefreshInterval)"
                 $parsed = 0
                 if ([int]::TryParse($newInterval, [ref]$parsed) -and $parsed -ge 10 -and $parsed -le 300) {
                     $script:InTUIConfig.RefreshInterval = $parsed
@@ -121,7 +125,7 @@ function Show-InTUISettings {
                 Read-InTUIKey
             }
             'Change Default Export Path' {
-                $newPath = Read-SpectreText -Message "[blue]Default export path[/]" -DefaultAnswer "$($script:InTUIConfig.DefaultExportPath)"
+                $newPath = Read-InTUITextInput -Message "[blue]Default export path[/]" -DefaultAnswer "$($script:InTUIConfig.DefaultExportPath)"
                 if (Test-Path $newPath -PathType Container) {
                     $script:InTUIConfig.DefaultExportPath = $newPath
                     Save-InTUIConfig
@@ -141,7 +145,7 @@ function Show-InTUISettings {
                 Read-InTUIKey
             }
             'Change Cache TTL' {
-                $newTTL = Read-SpectreText -Message "[blue]Cache TTL in seconds (60-3600)[/]" -DefaultAnswer "$($script:CacheTTL)"
+                $newTTL = Read-InTUITextInput -Message "[blue]Cache TTL in seconds (60-3600)[/]" -DefaultAnswer "$($script:CacheTTL)"
                 $parsed = 0
                 if ([int]::TryParse($newTTL, [ref]$parsed) -and $parsed -ge 60 -and $parsed -le 3600) {
                     $script:CacheTTL = $parsed
@@ -175,6 +179,16 @@ function Show-InTUISettings {
                 Show-InTUIPanel -Title "[blue]Cache Statistics[/]" -Content $content -BorderColor Blue
                 Read-InTUIKey
             }
+            'Change Theme' {
+                $themeChoices = @('Mocha', 'Macchiato', 'Frappe', 'Latte', 'Cancel')
+                $themeSelection = Show-InTUIMenu -Title "[blue]Select Theme[/]" -Choices $themeChoices
+                if ($themeSelection -ne 'Cancel' -and $script:CatppuccinThemes.ContainsKey($themeSelection)) {
+                    $script:InTUIConfig.Theme = $themeSelection
+                    Save-InTUIConfig
+                    Show-InTUISuccess "Theme changed to $themeSelection"
+                }
+                Read-InTUIKey
+            }
             'Reset to Defaults' {
                 $confirm = Show-InTUIConfirm -Message "[yellow]Reset all settings to defaults?[/]"
                 if ($confirm) {
@@ -184,6 +198,7 @@ function Show-InTUISettings {
                         DefaultExportPath = $PWD
                         CacheEnabled    = $true
                         CacheTTL        = 300
+                        Theme           = 'Mocha'
                     }
                     $script:PageSize = 50
                     $script:CacheEnabled = $true

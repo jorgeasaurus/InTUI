@@ -16,6 +16,7 @@ function Show-InTUIEnrollmentView {
         $choices = @(
             'Autopilot Devices',
             'Autopilot Deployment Profiles',
+            'Deployment Monitor',
             'Enrollment Configurations',
             'Apple Push Certificate',
             'Apple DEP/ABM Tokens',
@@ -33,6 +34,9 @@ function Show-InTUIEnrollmentView {
             }
             'Autopilot Deployment Profiles' {
                 Show-InTUIAutopilotProfileList
+            }
+            'Deployment Monitor' {
+                Show-InTUIAutopilotMonitor
             }
             'Enrollment Configurations' {
                 Show-InTUIEnrollmentConfigList
@@ -99,7 +103,7 @@ function Show-InTUIAutopilotDeviceList {
         $choiceMap = Get-InTUIChoiceMap -Choices $deviceChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($devices.Count ?? $devices.Results.Count) -Showing $devices.Results.Count
+        Show-InTUIStatusBar -Total $devices.TotalCount -Showing $devices.Results.Count
 
         $selection = Show-InTUIMenu -Title "[steelblue1_1]Select an Autopilot device[/]" -Choices $menuChoices
 
@@ -227,7 +231,7 @@ function Show-InTUIAutopilotProfileList {
         $choiceMap = Get-InTUIChoiceMap -Choices $profileChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($profiles.Count ?? $profiles.Results.Count) -Showing $profiles.Results.Count
+        Show-InTUIStatusBar -Total $profiles.TotalCount -Showing $profiles.Results.Count
 
         $selection = Show-InTUIMenu -Title "[steelblue1_1]Select a profile[/]" -Choices $menuChoices
 
@@ -411,7 +415,7 @@ function Show-InTUIEnrollmentConfigList {
         $choiceMap = Get-InTUIChoiceMap -Choices $configChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($configs.Count ?? $configs.Results.Count) -Showing $configs.Results.Count
+        Show-InTUIStatusBar -Total $configs.TotalCount -Showing $configs.Results.Count
 
         $selection = Show-InTUIMenu -Title "[steelblue1_1]Select a configuration[/]" -Choices $menuChoices
 
@@ -573,8 +577,8 @@ function Show-InTUIApplePushCertificate {
     Show-InTUIPanel -Title "[steelblue1_1]Apple Push Certificate[/]" -Content $propsContent -BorderColor SteelBlue1_1
 
     if ($expirationWarning) {
-        Write-SpectreHost "[red]WARNING: Apple Push Certificate is expiring soon. Renew immediately to avoid enrollment issues.[/]"
-        Write-SpectreHost ""
+        Write-InTUIText "[red]WARNING: Apple Push Certificate is expiring soon. Renew immediately to avoid enrollment issues.[/]"
+        Write-InTUIText ""
     }
 
     Write-InTUILog -Message "Viewed Apple Push Certificate" -Context @{
@@ -748,8 +752,8 @@ function Show-InTUIAppleDEPTokenDetail {
         Show-InTUIPanel -Title "[steelblue1_1]DEP/ABM Token Properties[/]" -Content $propsContent -BorderColor SteelBlue1_1
 
         if ($expirationWarning) {
-            Write-SpectreHost "[red]WARNING: This token is expiring soon. Renew in Apple Business/School Manager.[/]"
-            Write-SpectreHost ""
+            Write-InTUIText "[red]WARNING: This token is expiring soon. Renew in Apple Business/School Manager.[/]"
+            Write-InTUIText ""
         }
 
         # Enrollment profiles linked to this token
@@ -856,4 +860,114 @@ function Invoke-InTUIDEPSync {
     }
 
     Read-InTUIKey
+}
+
+function Show-InTUIAutopilotMonitor {
+    <#
+    .SYNOPSIS
+        Auto-refreshing monitor for tracking an Autopilot deployment by serial number.
+    #>
+    [CmdletBinding()]
+    param()
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Enrollment', 'Deployment Monitor')
+
+    $serial = Read-InTUITextInput -Message "[steelblue1_1]Enter device serial number[/]"
+    if ([string]::IsNullOrWhiteSpace($serial)) { return }
+
+    $safeSerial = ConvertTo-InTUISafeFilterValue -Value $serial.Trim()
+
+    Write-InTUILog -Message "Starting Autopilot deployment monitor" -Context @{ SerialNumber = $safeSerial }
+
+    $refreshInterval = $script:InTUIConfig.RefreshInterval
+    $exitMonitor = $false
+
+    while (-not $exitMonitor) {
+        Clear-Host
+        Show-InTUIHeader
+        Show-InTUIBreadcrumb -Path @('Home', 'Enrollment', 'Deployment Monitor', $safeSerial)
+
+        # Fetch Autopilot identity
+        $autopilot = Invoke-InTUIGraphRequest -Uri "/deviceManagement/windowsAutopilotDeviceIdentities?`$filter=contains(serialNumber,'$safeSerial')" -Beta
+
+        $apDevice = if ($autopilot.value) { @($autopilot.value)[0] } else { $null }
+
+        # Fetch managed device
+        $managed = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices?`$filter=serialNumber eq '$safeSerial'" -Beta
+        $mgDevice = if ($managed.value) { @($managed.value)[0] } else { $null }
+
+        # Determine enrollment state and progress
+        $enrollState = $apDevice.enrollmentState ?? 'notFound'
+        $progressPct = switch ($enrollState) {
+            'notRegistered' { 0 }
+            'registered'    { 25 }
+            'enrolling'     { 50 }
+            'enrolled'      { 75 }
+            default         { 0 }
+        }
+
+        if ($mgDevice -and $mgDevice.complianceState -eq 'compliant') {
+            $progressPct = 100
+        }
+
+        $progressBar = Get-InTUIProgressBar -Percentage $progressPct -Width 30
+
+        # Build status panel
+        $statusContent = @"
+[bold white]Serial Number:[/]     $safeSerial
+"@
+
+        if ($apDevice) {
+            $statusContent += @"
+
+[grey]Model:[/]              $($apDevice.model ?? 'N/A')
+[grey]Manufacturer:[/]       $($apDevice.manufacturer ?? 'N/A')
+[grey]Group Tag:[/]          $($apDevice.groupTag ?? 'N/A')
+[grey]Enrollment State:[/]   [white]$enrollState[/]
+[grey]Deployment Profile:[/] $($apDevice.deploymentProfileAssignmentStatus ?? 'N/A')
+[grey]Last Contact:[/]       $(Format-InTUIDate -DateString $apDevice.lastContactedDateTime)
+"@
+        }
+        else {
+            $statusContent += "`n[yellow]No Autopilot identity found for this serial number.[/]"
+        }
+
+        if ($mgDevice) {
+            $compColor = Get-InTUIComplianceColor -State $mgDevice.complianceState
+            $statusContent += @"
+
+[bold]Managed Device Info[/]
+[grey]Device Name:[/]        $($mgDevice.deviceName ?? 'N/A')
+[grey]Compliance:[/]         [$compColor]$($mgDevice.complianceState ?? 'N/A')[/]
+[grey]Last Sync:[/]          $(Format-InTUIDate -DateString $mgDevice.lastSyncDateTime)
+[grey]OS Version:[/]         $($mgDevice.osVersion ?? 'N/A')
+"@
+        }
+
+        $statusContent += @"
+
+[bold]Progress:[/] $progressBar [white]$progressPct%[/]
+"@
+
+        Show-InTUIPanel -Title "[steelblue1_1]Autopilot Deployment Status[/]" -Content $statusContent -BorderColor SteelBlue1_1
+
+        Write-InTUIText "[grey]Auto-refresh in ${refreshInterval}s | Q to quit[/]"
+
+        # Wait loop with key check
+        $elapsed = 0
+        while ($elapsed -lt $refreshInterval) {
+            Start-Sleep -Seconds 1
+            $elapsed++
+
+            if ([Console]::KeyAvailable) {
+                $keyInfo = [Console]::ReadKey($true)
+                if ($keyInfo.KeyChar -eq 'q' -or $keyInfo.KeyChar -eq 'Q') {
+                    $exitMonitor = $true
+                    break
+                }
+            }
+        }
+    }
 }

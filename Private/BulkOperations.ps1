@@ -17,7 +17,7 @@ function Export-InTUIToCSV {
 
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $suggestedName = "${DefaultFileName}_${timestamp}.csv"
-    $exportPath = Read-SpectreText -Message "[blue]Export path[/]" -DefaultAnswer "$PWD/$suggestedName"
+    $exportPath = Read-InTUITextInput -Message "[blue]Export path[/]" -DefaultAnswer "$PWD/$suggestedName"
 
     if (-not $exportPath) { return }
 
@@ -64,8 +64,8 @@ function Invoke-InTUIBulkDeviceAction {
 
     $choiceMap = Get-InTUIChoiceMap -Choices $deviceNames
 
-    Write-SpectreHost "[blue]Select devices for bulk action (space to select, enter to confirm):[/]"
-    $selected = Read-SpectreMultiSelection -Title "[blue]Select devices[/]" -Choices $choiceMap.Choices -PageSize 20
+    Write-InTUIText "[blue]Select devices for bulk action (space to select, enter to confirm):[/]"
+    $selected = Show-InTUIMultiSelect -Title "[blue]Select devices[/]" -Choices $choiceMap.Choices -PageSize 20
 
     if (-not $selected -or $selected.Count -eq 0) {
         Show-InTUIWarning "No devices selected."

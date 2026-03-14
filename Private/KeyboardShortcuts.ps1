@@ -15,6 +15,7 @@ $script:InTUIShortcuts = @{
     'e' = @{ Action = 'Enrollment'; Description = 'Enrollment' }
     'x' = @{ Action = 'Security'; Description = 'Security' }
     'b' = @{ Action = 'Bookmarks'; Description = 'Bookmarks' }
+    't' = @{ Action = 'CommandPalette'; Description = 'Command Palette' }
 }
 
 function Show-InTUIShortcutBar {
@@ -33,11 +34,12 @@ function Show-InTUIShortcutBar {
         "[grey]r[/]:Reports"
         "[grey]s[/]:Settings"
         "[grey]/[/]:Search"
+        "[grey]t[/]:Palette"
         "[grey]?[/]:Help"
     )
 
     $bar = $shortcuts -join " [grey]|[/] "
-    Write-SpectreHost $bar
+    Write-InTUIText $bar
 }
 
 function Invoke-InTUIShortcut {
@@ -94,6 +96,7 @@ function Show-InTUIHelp {
 [cyan]s[/]  - Settings
 [cyan]/[/]  - Global Search
 [cyan]b[/]  - Bookmarks
+[cyan]t[/]  - Command Palette
 [cyan]?[/]  - This Help
 
 [bold]Menu Navigation[/]
@@ -118,9 +121,6 @@ Access via the main menu Recording option.
 Save frequently accessed views for quick navigation.
 Access via the Bookmarks option.
 
-[bold]Tenant Comparison[/]
-Compare metrics between two tenants side-by-side.
-Access via Compare Tenants in the main menu.
 "@
 
     Show-InTUIPanel -Title "[blue]Features[/]" -Content $featuresContent -BorderColor Blue
@@ -130,12 +130,12 @@ Access via Compare Tenants in the main menu.
 [bold]InTUI[/] - Intune Terminal User Interface
 Version: $($script:InTUIVersion)
 
-A Spectre Console based TUI for Microsoft Intune management.
+A terminal UI for Microsoft Intune management.
 
 [grey]Powered by:[/]
 - Microsoft Graph API
 - Microsoft.Graph.Authentication
-- PwshSpectreConsole
+- Custom ANSI TUI Engine
 "@
 
     Show-InTUIPanel -Title "[blue]About[/]" -Content $aboutContent -BorderColor Blue

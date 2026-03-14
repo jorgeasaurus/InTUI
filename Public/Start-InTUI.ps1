@@ -8,6 +8,12 @@ function Start-InTUI {
         multiple cloud environments including Commercial, GCC, GCC-High/DoD, and China.
     .PARAMETER TenantId
         Optional tenant ID to connect to a specific tenant.
+    .PARAMETER ClientId
+        Application (client) ID for service principal auth.
+    .PARAMETER ClientSecret
+        Client secret for service principal auth.
+    .PARAMETER SecretsFile
+        Path to a dotenv-style file with TENANT_ID, CLIENT_ID, CLIENT_SECRET.
     .PARAMETER Environment
         Cloud environment: Global, USGov, USGovDoD, or China. Defaults to Global.
     .PARAMETER SkipConnect
@@ -15,14 +21,23 @@ function Start-InTUI {
     .EXAMPLE
         Start-InTUI
     .EXAMPLE
-        Start-InTUI -TenantId "contoso.onmicrosoft.com"
+        Start-InTUI -SecretsFile ./.secrets
     .EXAMPLE
-        Start-InTUI -Environment USGov -TenantId "contoso.onmicrosoft.us"
+        Start-InTUI -TenantId $tid -ClientId $cid -ClientSecret $sec
     #>
     [CmdletBinding()]
     param(
         [Parameter()]
         [string]$TenantId,
+
+        [Parameter()]
+        [string]$ClientId,
+
+        [Parameter()]
+        [string]$ClientSecret,
+
+        [Parameter()]
+        [string]$SecretsFile,
 
         [Parameter()]
         [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
@@ -32,9 +47,27 @@ function Start-InTUI {
         [switch]$SkipConnect
     )
 
+    # Load secrets file if provided
+    if ($SecretsFile -and (Test-Path $SecretsFile)) {
+        foreach ($line in Get-Content $SecretsFile) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
+            $parts = $trimmed -split '=', 2
+            if ($parts.Count -ne 2) { continue }
+            $key = $parts[0].Trim()
+            $val = $parts[1].Trim()
+            switch ($key) {
+                'TENANT_ID'     { if (-not $TenantId) { $TenantId = $val } }
+                'CLIENT_ID'     { if (-not $ClientId) { $ClientId = $val } }
+                'CLIENT_SECRET' { if (-not $ClientSecret) { $ClientSecret = $val } }
+            }
+        }
+    }
+
     Initialize-InTUILog
     Initialize-InTUIConfig
     Initialize-InTUICache
+    Initialize-InTUIHistory
     Write-InTUILog -Message "InTUI starting" -Context @{ Version = $script:InTUIVersion; Environment = $Environment }
 
     if (-not $SkipConnect) {
@@ -42,7 +75,7 @@ function Start-InTUI {
         if ($context) {
             $script:Connected = $true
             $script:TenantId = $context.TenantId
-            $script:Account = $context.Account
+            $script:Account = $context.Account ?? $ClientId ?? 'ServicePrincipal'
             if ($context.Environment) {
                 $script:CloudEnvironment = $context.Environment
                 $envConfig = $script:CloudEnvironments[$context.Environment]
@@ -60,6 +93,8 @@ function Start-InTUI {
         else {
             $params = @{ Environment = $Environment }
             if ($TenantId) { $params['TenantId'] = $TenantId }
+            if ($ClientId) { $params['ClientId'] = $ClientId }
+            if ($ClientSecret) { $params['ClientSecret'] = $ClientSecret }
             $connected = Connect-InTUI @params
             if (-not $connected) {
                 Write-InTUILog -Level 'ERROR' -Message "Failed to connect, exiting"
@@ -76,39 +111,54 @@ function Start-InTUI {
         Show-InTUIBreadcrumb -Path @('Home')
         Show-InTUIDashboard
 
-        $mainChoices = @(
-            "$([char]0x25A0) Devices",
-            "$([char]0x25A6) Apps",
-            "$([char]0x263A) Users",
-            "$([char]0x2756) Groups",
-            "$([char]0x2699) Configuration Profiles",
-            "$([char]0x2713) Compliance Policies",
-            "$([char]0x26A0) Conditional Access",
-            "$([char]0x2B06) Enrollment",
-            "$([char]0x2630) Scripts & Remediations",
-            "$([char]0x26E8) Security",
-            "$([char]0x25A3) Reports",
-            "$([char]0x2550)$([char]0x2550)$([char]0x2550) Tools $([char]0x2550)$([char]0x2550)$([char]0x2550)",
-            "$([char]0x2315) Global Search",
-            "$([char]0x2605) Bookmarks",
-            "$([char]0x21C4) Compare Tenants",
-            "$([char]0x21BB) Live Dashboard",
-            "$([char]0x25CF) Script Recording",
-            "$([char]0x2699) Settings",
-            "$([char]0x2550)$([char]0x2550)$([char]0x2550) Session $([char]0x2550)$([char]0x2550)$([char]0x2550)",
-            "$([char]0x21BB) Refresh Dashboard",
-            "$([char]0x21C6) Switch Tenant",
-            "$([char]0x2601) Switch Cloud Environment",
-            "$([char]0x003F) Help",
-            "$([char]0x2717) Exit"
+        $sections = @(
+            @{
+                Title = 'Endpoint Management'
+                Items = @('Devices', 'Apps', 'Users', 'Groups')
+            }
+            @{
+                Title = 'Policy & Compliance'
+                Items = @('Configuration Profiles', 'Compliance Policies', 'Conditional Access', 'Enrollment')
+            }
+            @{
+                Title = 'Security & Scripts'
+                Items = @('Scripts & Remediations', 'Security', 'Reports')
+            }
+            @{
+                Title = 'Tools'
+                Items = @('Global Search', 'Bookmarks', 'Recent History', "What's Applied?", 'Assignment Conflicts', 'Policy Diff', 'Command Palette', 'Live Dashboard', 'Script Recording', 'Settings')
+            }
+            @{
+                Title = 'Session'
+                Items = @('Refresh Dashboard', 'Switch Tenant', 'Switch Cloud Environment', 'Help', 'Exit')
+            }
         )
 
-        $selection = Show-InTUIMenu -Title "[blue]Navigate to[/]" -Choices $mainChoices
+        if ($script:HasArrowKeySupport) {
+            $result = Show-InTUIMenuArrowAccordion -Title "[blue]Navigate to[/]" -Sections $sections
+        }
+        else {
+            # Classic fallback - flatten sections into a single list
+            $flatChoices = @()
+            foreach ($sec in $sections) {
+                foreach ($item in $sec.Items) { $flatChoices += $item }
+            }
+            $idx = Show-InTUIMenuClassic -Title "[blue]Navigate to[/]" -Choices $flatChoices
+            if ($idx -eq 'Back') {
+                $result = $null
+            }
+            elseif ($idx -is [int] -and $idx -ge 0 -and $idx -lt $flatChoices.Count) {
+                $result = @{ ItemText = $flatChoices[$idx] }
+            }
+            else {
+                $result = $null
+            }
+        }
 
-        # Strip icon prefix for switch matching
-        $cleanSelection = $selection -replace "^[$([char]0x25A0)$([char]0x25A6)$([char]0x263A)$([char]0x2756)$([char]0x2699)$([char]0x2713)$([char]0x26A0)$([char]0x2B06)$([char]0x2630)$([char]0x26E8)$([char]0x25A3)$([char]0x2315)$([char]0x2605)$([char]0x21C4)$([char]0x21BB)$([char]0x25CF)$([char]0x21C6)$([char]0x2601)$([char]0x003F)$([char]0x2717)] ", ""
+        if (-not $result) { continue }
+        $selection = $result.ItemText
 
-        switch ($cleanSelection) {
+        switch ($selection) {
             'Devices' {
                 Write-InTUILog -Message "Navigating to Devices view"
                 Show-InTUIDevicesView
@@ -161,9 +211,25 @@ function Start-InTUI {
                 Write-InTUILog -Message "Opening Bookmarks"
                 Show-InTUIBookmarks
             }
-            'Compare Tenants' {
-                Write-InTUILog -Message "Opening Tenant Comparison"
-                Show-InTUITenantComparison
+            'Recent History' {
+                Write-InTUILog -Message "Opening Recent History"
+                Show-InTUIRecentHistory
+            }
+            "What's Applied?" {
+                Write-InTUILog -Message "Opening What's Applied"
+                Show-InTUIWhatsAppliedView
+            }
+            'Assignment Conflicts' {
+                Write-InTUILog -Message "Opening Assignment Conflicts"
+                Show-InTUIAssignmentConflictView
+            }
+            'Policy Diff' {
+                Write-InTUILog -Message "Opening Policy Diff"
+                Show-InTUIPolicyDiffView
+            }
+            'Command Palette' {
+                Write-InTUILog -Message "Opening Command Palette"
+                Show-InTUICommandPalette
             }
             'Live Dashboard' {
                 Write-InTUILog -Message "Starting Live Dashboard"
@@ -187,7 +253,7 @@ function Start-InTUI {
                 continue
             }
             'Switch Tenant' {
-                $newTenant = Read-SpectreText -Message "[blue]Enter Tenant ID or domain[/]"
+                $newTenant = Read-InTUITextInput -Message "[blue]Enter Tenant ID or domain[/]"
                 if ($newTenant) {
                     Write-InTUILog -Message "Switching tenant" -Context @{ NewTenant = $newTenant }
                     Disconnect-MgGraph -ErrorAction SilentlyContinue
@@ -232,10 +298,5 @@ function Start-InTUI {
     }
 
     Clear-Host
-    $goodbye = @"
-[blue]  $([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)[/]
-[blue]  $([char]0x25CF) Thanks for using InTUI! $([char]0x25CF)[/]
-[blue]  $([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)$([char]0x2500)[/]
-"@
-    Write-SpectreHost $goodbye
+    Write-InTUIText "[blue]Thanks for using InTUI![/]"
 }

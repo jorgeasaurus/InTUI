@@ -16,11 +16,11 @@ function Invoke-InTUIGlobalSearch {
         Show-InTUIHeader
         Show-InTUIBreadcrumb -Path @('Home', 'Global Search')
 
-        Write-SpectreHost "[bold]Global Search[/]"
-        Write-SpectreHost "[grey]Search across devices, apps, users, and groups[/]"
-        Write-SpectreHost ""
+        Write-InTUIText "[bold]Global Search[/]"
+        Write-InTUIText "[grey]Search across devices, apps, users, and groups[/]"
+        Write-InTUIText ""
 
-        $searchTerm = Read-SpectreText -Message "[blue]Enter search term (min 3 characters)[/]"
+        $searchTerm = Read-InTUITextInput -Message "[blue]Enter search term (min 3 characters)[/]"
 
         if (-not $searchTerm -or $searchTerm.Length -lt 3) {
             if (-not $searchTerm) {

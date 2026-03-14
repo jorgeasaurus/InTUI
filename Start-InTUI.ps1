@@ -4,14 +4,13 @@
     Launches InTUI - The Intune Terminal User Interface.
 
 .DESCRIPTION
-    InTUI is a Spectre Console based terminal UI for managing Microsoft Intune
-    resources via Microsoft Graph API. It provides an interactive interface for
-    managing Devices, Apps, Users, and Groups.
+    InTUI is a terminal UI for managing Microsoft Intune resources via
+    Microsoft Graph API. It provides an interactive interface for managing
+    Devices, Apps, Users, and Groups.
 
     Prerequisites:
     - PowerShell 7.2+
     - Microsoft.Graph.Authentication module
-    - PwshSpectreConsole module
 
 .PARAMETER TenantId
     Optional tenant ID or domain to connect to.
@@ -34,6 +33,15 @@ param(
     [string]$TenantId,
 
     [Parameter()]
+    [string]$ClientId,
+
+    [Parameter()]
+    [string]$ClientSecret,
+
+    [Parameter()]
+    [string]$SecretsFile,
+
+    [Parameter()]
     [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
     [string]$Environment = 'Global',
 
@@ -43,7 +51,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$requiredModules = @('Microsoft.Graph.Authentication', 'PwshSpectreConsole')
+$requiredModules = @('Microsoft.Graph.Authentication')
 
 if ($Install) {
     Write-Host "Installing required modules..." -ForegroundColor Cyan
@@ -79,5 +87,8 @@ Import-Module $modulePath -Force
 
 $params = @{ Environment = $Environment }
 if ($TenantId) { $params['TenantId'] = $TenantId }
+if ($ClientId) { $params['ClientId'] = $ClientId }
+if ($ClientSecret) { $params['ClientSecret'] = $ClientSecret }
+if ($SecretsFile) { $params['SecretsFile'] = $SecretsFile }
 
 Start-InTUI @params

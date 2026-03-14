@@ -96,8 +96,7 @@ function Show-InTUIConditionalAccessPolicyList {
         $choiceMap = Get-InTUIChoiceMap -Choices $policyChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($policies.Count ?? $policies.Results.Count) -Showing $policies.Results.Count
-
+        Show-InTUIStatusBar -Total $policies.TotalCount -Showing $policies.Results.Count
         $selection = Show-InTUIMenu -Title "[DeepSkyBlue1]Select a policy[/]" -Choices $menuChoices
 
         if ($selection -eq 'Back') {
@@ -350,7 +349,7 @@ function Show-InTUINamedLocationList {
         $choiceMap = Get-InTUIChoiceMap -Choices $locationChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($locations.Count ?? $locations.Results.Count) -Showing $locations.Results.Count
+        Show-InTUIStatusBar -Total $locations.TotalCount -Showing $locations.Results.Count
 
         $selection = Show-InTUIMenu -Title "[DeepSkyBlue1]Select a named location[/]" -Choices $menuChoices
 
@@ -488,7 +487,7 @@ function Show-InTUISignInLogs {
             $filter = 'status/errorCode ne 0'
         }
         'Specific User' {
-            $upn = Read-SpectreText -Message "[DeepSkyBlue1]Enter user principal name (UPN)[/]"
+            $upn = Read-InTUITextInput -Message "[DeepSkyBlue1]Enter user principal name (UPN)[/]"
             if (-not $upn) { return }
             $safeUpn = ConvertTo-InTUISafeFilterValue -Value $upn
             $filter = "userPrincipalName eq '$safeUpn'"

@@ -145,16 +145,16 @@ function Show-InTUIBookmarks {
 
         if ($tenantBookmarks.Count -eq 0) {
             Show-InTUIWarning "No bookmarks saved for this tenant."
-            Write-SpectreHost ""
-            Write-SpectreHost "[grey]To add a bookmark, use the 'Add Bookmark' action in any detail view.[/]"
+            Write-InTUIText ""
+            Write-InTUIText "[grey]To add a bookmark, use the 'Add Bookmark' action in any detail view.[/]"
             Read-InTUIKey
             $exitView = $true
             continue
         }
 
-        Write-SpectreHost "[bold]Saved Bookmarks[/]"
-        Write-SpectreHost "[grey]Select a bookmark to navigate, or manage bookmarks[/]"
-        Write-SpectreHost ""
+        Write-InTUIText "[bold]Saved Bookmarks[/]"
+        Write-InTUIText "[grey]Select a bookmark to navigate, or manage bookmarks[/]"
+        Write-InTUIText ""
 
         $bookmarkChoices = @()
         foreach ($bm in $tenantBookmarks) {

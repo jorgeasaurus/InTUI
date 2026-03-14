@@ -108,7 +108,7 @@ function Show-InTUIAppProtectionPolicyList {
         $choiceMap = Get-InTUIChoiceMap -Choices $policyChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($policies.Count ?? $policies.Results.Count) -Showing $policies.Results.Count
+        Show-InTUIStatusBar -Total $policies.TotalCount -Showing $policies.Results.Count
 
         $selection = Show-InTUIMenu -Title "[green]Select a policy[/]" -Choices $menuChoices
 
@@ -320,7 +320,7 @@ function Show-InTUIVppTokenList {
         $choiceMap = Get-InTUIChoiceMap -Choices $tokenChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($tokens.Count ?? $tokens.Results.Count) -Showing $tokens.Results.Count
+        Show-InTUIStatusBar -Total $tokens.TotalCount -Showing $tokens.Results.Count
 
         $selection = Show-InTUIMenu -Title "[green]Select a VPP token[/]" -Choices $menuChoices
 

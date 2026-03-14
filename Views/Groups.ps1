@@ -6,23 +6,23 @@ function Get-InTUIGroupType {
     param($Group)
 
     if ($Group.groupTypes -contains 'DynamicMembership') {
-        if ($Group.securityEnabled) { return "[cyan]$([char]0x21BB) Dynamic Security[/]" }
-        else { return "[cyan]$([char]0x21BB) Dynamic M365[/]" }
+        if ($Group.securityEnabled) { return "[cyan]Dynamic Security[/]" }
+        else { return "[cyan]Dynamic M365[/]" }
     }
     elseif ($Group.securityEnabled -and -not $Group.mailEnabled) {
-        return "[blue]$([char]0x26E8) Security[/]"
+        return "[blue]Security[/]"
     }
     elseif ($Group.mailEnabled -and $Group.securityEnabled) {
-        return "[green]$([char]0x2709) Mail-enabled Security[/]"
+        return "[green]Mail-enabled Security[/]"
     }
     elseif ($Group.groupTypes -contains 'Unified') {
-        return "[cyan]$([char]0x25A3) Microsoft 365[/]"
+        return "[cyan]Microsoft 365[/]"
     }
     elseif ($Group.mailEnabled) {
-        return "[yellow]$([char]0x2709) Distribution[/]"
+        return "[yellow]Distribution[/]"
     }
     else {
-        return "[grey]$([char]0x26E8) Assigned Security[/]"
+        return "[grey]Assigned Security[/]"
     }
 }
 
@@ -42,23 +42,20 @@ function Show-InTUIGroupsView {
         Show-InTUIBreadcrumb -Path @('Home', 'Groups')
 
         $groupChoices = @(
-            "$([char]0x2756) All Groups",
-            "$([char]0x26E8) Security Groups",
-            "$([char]0x25A3) Microsoft 365 Groups",
-            "$([char]0x21BB) Dynamic Groups",
-            "$([char]0x2315) Search Groups",
-            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
-            "$([char]0x2190) Back to Home"
+            'All Groups',
+            'Security Groups',
+            'Microsoft 365 Groups',
+            'Dynamic Groups',
+            'Search Groups',
+            '-------------',
+            'Back to Home'
         )
 
-        $selection = Show-InTUIMenu -Title "[cyan]$([char]0x2756) Groups[/]" -Choices $groupChoices
+        $selection = Show-InTUIMenu -Title "[cyan]Groups[/]" -Choices $groupChoices
 
         Write-InTUILog -Message "Groups view selection" -Context @{ Selection = $selection }
 
-        # Strip icon prefix for switch matching
-        $cleanSelection = $selection -replace "^.{1,2} ", ""
-
-        switch ($cleanSelection) {
+        switch ($selection) {
             'All Groups' {
                 Show-InTUIGroupList
             }
@@ -72,7 +69,7 @@ function Show-InTUIGroupsView {
                 Show-InTUIGroupList -TypeFilter 'Dynamic'
             }
             'Search Groups' {
-                $searchTerm = Read-SpectreText -Message "[cyan]$([char]0x2315) Search groups by name[/]"
+                $searchTerm = Read-InTUITextInput -Message "[cyan]Search groups by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching groups" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIGroupList -SearchTerm $searchTerm
@@ -160,7 +157,7 @@ function Show-InTUIGroupList {
             $groupType = Get-InTUIGroupType -Group $group
             $desc = if ($group.description) {
                 $truncated = $group.description
-                if ($truncated.Length -gt 40) { $truncated = $truncated.Substring(0, 40) + '...' }
+                if ((Measure-InTUIDisplayWidth -Text $truncated) -gt 40) { $truncated = $truncated.Substring(0, 40) + '...' }
                 $truncated
             }
             else { 'No description' }
@@ -172,7 +169,7 @@ function Show-InTUIGroupList {
         $choiceMap = Get-InTUIChoiceMap -Choices $groupChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($groups.Count ?? $groups.Results.Count) -Showing $groups.Results.Count -FilterText ($TypeFilter ?? $SearchTerm)
+        Show-InTUIStatusBar -Total $groups.TotalCount -Showing $groups.Results.Count -FilterText ($TypeFilter ?? $SearchTerm)
 
         $selection = Show-InTUIMenu -Title "[cyan]Select a group[/]" -Choices $menuChoices
 
@@ -217,6 +214,8 @@ function Show-InTUIGroupDetail {
 
         Show-InTUIBreadcrumb -Path @('Home', 'Groups', $group.displayName)
 
+        Add-InTUIHistoryEntry -ViewType 'Group' -ViewId $GroupId -DisplayName $group.displayName
+
         $groupType = Get-InTUIGroupType -Group $group
         $isDynamic = $group.groupTypes -contains 'DynamicMembership'
 
@@ -250,8 +249,8 @@ function Show-InTUIGroupDetail {
 
         if ($null -ne $memberCountData) {
             $count = $memberCountData.'@odata.count' ?? @($memberCountData.value).Count
-            Write-SpectreHost "[grey]Members:[/] [white]$count[/]"
-            Write-SpectreHost ""
+            Write-InTUIText "[grey]Members:[/] [white]$count[/]"
+            Write-InTUIText ""
         }
 
         $actionChoices = @(
@@ -286,7 +285,7 @@ function Show-InTUIGroupDetail {
                 Show-InTUIHeader
                 Show-InTUIBreadcrumb -Path @('Home', 'Groups', $group.displayName, 'Membership Rule')
                 Show-InTUIPanel -Title "Dynamic Membership Rule" -Content "[cyan]$($group.membershipRule ?? 'No rule defined')[/]" -BorderColor Cyan11
-                Write-SpectreHost "[grey]Processing State:[/] $($group.membershipRuleProcessingState ?? 'N/A')"
+                Write-InTUIText "[grey]Processing State:[/] $($group.membershipRuleProcessingState ?? 'N/A')"
                 Read-InTUIKey
             }
             'Back to Groups' {
@@ -347,16 +346,39 @@ function Show-InTUIGroupMembers {
 
     Show-InTUITable -Title "Members of $GroupName" -Columns @('Name', 'Type', 'UPN/Email', 'Title') -Rows $rows
 
-    $userMembers = $members.Results | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.user' }
-    if ($userMembers.Count -gt 0) {
-        $choices = @($userMembers | ForEach-Object { $_.displayName })
-        $choices += 'Back'
+    # Build selectable member list (users and devices)
+    $selectableMembers = @($members.Results | Where-Object {
+        $_.'@odata.type' -eq '#microsoft.graph.user' -or $_.'@odata.type' -eq '#microsoft.graph.device'
+    })
 
-        $selection = Show-InTUIMenu -Title "[cyan]View user details[/]" -Choices $choices
-        if ($selection -ne 'Back') {
-            $selectedUser = $userMembers | Where-Object { $_.displayName -eq $selection }
-            if ($selectedUser) {
-                Show-InTUIUserDetail -UserId $selectedUser.id
+    if ($selectableMembers.Count -gt 0) {
+        $memberChoices = @()
+        foreach ($m in $selectableMembers) {
+            $typeLabel = if ($m.'@odata.type' -eq '#microsoft.graph.user') { 'User' } else { 'Device' }
+            $memberChoices += "[white]$(ConvertTo-InTUISafeMarkup -Text $m.displayName)[/] [grey]| $typeLabel[/]"
+        }
+        $choiceMap = Get-InTUIChoiceMap -Choices $memberChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
+
+        $selection = Show-InTUIMenu -Title "[cyan]View member details[/]" -Choices $menuChoices
+        if ($selection -ne 'Back' -and $selection -ne '─────────────') {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $selectableMembers.Count) {
+                $selected = $selectableMembers[$idx]
+                if ($selected.'@odata.type' -eq '#microsoft.graph.user') {
+                    Show-InTUIUserDetail -UserId $selected.id
+                }
+                elseif ($selected.'@odata.type' -eq '#microsoft.graph.device') {
+                    # Resolve managed device ID from AAD device
+                    $managedDevices = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices?`$filter=azureADDeviceId eq '$($selected.id)'&`$select=id" -Beta
+                    if ($managedDevices.value -and @($managedDevices.value).Count -gt 0) {
+                        Show-InTUIDeviceDetail -DeviceId @($managedDevices.value)[0].id
+                    }
+                    else {
+                        Show-InTUIWarning "Could not find a managed device for this AAD device."
+                        Read-InTUIKey
+                    }
+                }
             }
         }
     }

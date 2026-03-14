@@ -86,7 +86,7 @@ function Show-InTUIDeviceScriptList {
         $choiceMap = Get-InTUIChoiceMap -Choices $scriptChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($scripts.Count ?? $scripts.Results.Count) -Showing $scripts.Results.Count
+        Show-InTUIStatusBar -Total $scripts.TotalCount -Showing $scripts.Results.Count
 
         $selection = Show-InTUIMenu -Title "[yellow]Select a script[/]" -Choices $menuChoices
 
@@ -366,7 +366,7 @@ function Show-InTUIRemediationList {
         $choiceMap = Get-InTUIChoiceMap -Choices $remediationChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($remediations.Count ?? $remediations.Results.Count) -Showing $remediations.Results.Count
+        Show-InTUIStatusBar -Total $remediations.TotalCount -Showing $remediations.Results.Count
 
         $selection = Show-InTUIMenu -Title "[yellow]Select a remediation[/]" -Choices $menuChoices
 

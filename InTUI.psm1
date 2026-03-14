@@ -1,8 +1,8 @@
 #Requires -Version 7.2
-#Requires -Modules Microsoft.Graph.Authentication, PwshSpectreConsole
+#Requires -Modules Microsoft.Graph.Authentication
 
 # InTUI - Intune Terminal User Interface
-# A Spectre Console based TUI for Microsoft Intune management
+# A custom ANSI-based TUI for Microsoft Intune management
 
 $script:InTUIVersion = '1.0.0'
 $script:PageSize = 50
@@ -22,6 +22,9 @@ $script:RecordingEndTime = $null
 
 # Bookmarks
 $script:BookmarksPath = Join-Path $HOME '.intui_bookmarks.json'
+
+# Navigation history
+$script:HistoryPath = Join-Path $HOME '.intui_history.json'
 
 # Cloud environment definitions
 # GCC uses worldwide endpoints; GCC High uses graph.microsoft.us
@@ -67,4 +70,10 @@ foreach ($folder in 'Private', 'Public', 'Views') {
     }
 }
 
-Export-ModuleMember -Function 'Start-InTUI', 'Connect-InTUI', 'Export-InTUIData'
+# Cache capability detection at module load
+$script:HasArrowKeySupport = Test-InTUIArrowKeySupport
+$script:HasTrueColorSupport = Test-InTUITrueColorSupport
+
+New-Alias -Name 'intui' -Value 'Start-InTUI' -Force
+
+Export-ModuleMember -Function 'Start-InTUI', 'Connect-InTUI', 'Export-InTUIData' -Alias 'intui'

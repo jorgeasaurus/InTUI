@@ -50,49 +50,48 @@ function Show-InTUIDashboard {
     $complianceBar = Get-InTUIProgressBar -Percentage $compliancePercent -Width 25
 
     # Device panel with enhanced visuals
-    $devicePanel = Format-SpectrePanel -Data @"
-  $([char]0x25A0) [white bold]$($dashData.DeviceCount)[/] [grey]managed devices[/]
+    $deviceContent = @"
+  [white]$($dashData.DeviceCount)[/] [grey]managed devices[/]
 
   [bold]Compliance Status[/]
   $complianceBar [white]$compliancePercent%[/]
 
-  [green]$([char]0x25CF)[/] Compliant       [white bold]$($dashData.CompliantCount)[/]
-  [red]$([char]0x25CF)[/] Non-compliant   [white bold]$($dashData.NoncompliantCount)[/]
-  [yellow]$([char]0x25CF)[/] Grace Period    [white bold]$($dashData.InGracePeriod)[/]
-  [red]$([char]0x25CF)[/] Error           [white bold]$($dashData.ErrorCount)[/]
-"@ -Title "[blue]$([char]0x2630) Devices[/]" -Color Blue
+  [green]+[/] Compliant       [white]$($dashData.CompliantCount)[/]
+  [red]x[/] Non-compliant   [white]$($dashData.NoncompliantCount)[/]
+  [yellow]![/] Grace Period    [white]$($dashData.InGracePeriod)[/]
+  [red]x[/] Error           [white]$($dashData.ErrorCount)[/]
+"@
+    Show-InTUIPanel -Title "[blue]Devices[/]" -Content $deviceContent -BorderColor Blue
 
-    # App panel with icon
-    $appPanel = Format-SpectrePanel -Data @"
-  $([char]0x25A3) [white bold]$($dashData.AppCount)[/] [grey]applications[/]
+    # App panel
+    $appContent = @"
+  [white]$($dashData.AppCount)[/] [grey]applications[/]
 
-  [grey dim]Managed apps across all platforms[/]
-"@ -Title "[green]$([char]0x25A6) Apps[/]" -Color Green
+  [grey]Managed apps across all platforms[/]
+"@
+    Show-InTUIPanel -Title "[green]Apps[/]" -Content $appContent -BorderColor Green
 
-    # User panel with icon
-    $userPanel = Format-SpectrePanel -Data @"
-  $([char]0x263A) [white bold]$($dashData.UserCount)[/] [grey]users[/]
+    # User panel
+    $userContent = @"
+  [white]$($dashData.UserCount)[/] [grey]users[/]
 
-  [grey dim]Azure AD directory users[/]
-"@ -Title "[yellow]$([char]0x26AB) Users[/]" -Color Yellow
+  [grey]Azure AD directory users[/]
+"@
+    Show-InTUIPanel -Title "[yellow]Users[/]" -Content $userContent -BorderColor Yellow
 
-    # Group panel with icon
-    $groupPanel = Format-SpectrePanel -Data @"
-  $([char]0x2687) [white bold]$($dashData.GroupCount)[/] [grey]groups[/]
+    # Group panel
+    $groupContent = @"
+  [white]$($dashData.GroupCount)[/] [grey]groups[/]
 
-  [grey dim]Security and distribution groups[/]
-"@ -Title "[cyan]$([char]0x2756) Groups[/]" -Color Cyan1
-
-    $devicePanel | Out-SpectreHost
-    $appPanel | Out-SpectreHost
-    $userPanel | Out-SpectreHost
-    $groupPanel | Out-SpectreHost
+  [grey]Security and distribution groups[/]
+"@
+    Show-InTUIPanel -Title "[cyan]Groups[/]" -Content $groupContent -BorderColor Cyan
 
     # Quick stats footer
-    Write-SpectreHost ""
-    Write-SpectreHost "[grey dim]$(([string][char]0x2500) * 60)[/]"
-    Write-SpectreHost "[grey]Quick Stats:[/] [blue]$([char]0x25B6)[/] [white]$($dashData.DeviceCount)[/] devices  [green]$([char]0x25B6)[/] [white]$($dashData.AppCount)[/] apps  [yellow]$([char]0x25B6)[/] [white]$($dashData.UserCount)[/] users  [cyan]$([char]0x25B6)[/] [white]$($dashData.GroupCount)[/] groups"
-    Write-SpectreHost ""
+    Write-InTUIText ""
+    Write-InTUIText "[grey]$(([string][char]0x2500) * 60)[/]"
+    Write-InTUIText "[grey]Quick Stats:[/] [blue]>[/] [white]$($dashData.DeviceCount)[/] devices  [green]>[/] [white]$($dashData.AppCount)[/] apps  [yellow]>[/] [white]$($dashData.UserCount)[/] users  [cyan]>[/] [white]$($dashData.GroupCount)[/] groups"
+    Write-InTUIText ""
 }
 
 function Start-InTUIAutoRefresh {
@@ -119,9 +118,9 @@ function Start-InTUIAutoRefresh {
         Show-InTUIBreadcrumb -Path @('Home', 'Live Dashboard')
         Show-InTUIDashboard
 
-        Write-SpectreHost ""
-        Write-SpectreHost "[grey]Last refresh: $([DateTime]::Now.ToString('HH:mm:ss')) | Next refresh in ${IntervalSeconds}s[/]"
-        Write-SpectreHost "[yellow]Press any key to stop auto-refresh...[/]"
+        Write-InTUIText ""
+        Write-InTUIText "[grey]Last refresh: $([DateTime]::Now.ToString('HH:mm:ss')) | Next refresh in ${IntervalSeconds}s[/]"
+        Write-InTUIText "[yellow]Press any key to stop auto-refresh...[/]"
 
         # Wait for interval or key press
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()

@@ -14,25 +14,26 @@ function Show-InTUIReportsView {
         Show-InTUIBreadcrumb -Path @('Home', 'Reports')
 
         $reportChoices = @(
-            "$([char]0x23F0) Stale Devices Report",
-            "$([char]0x2717) App Install Failures",
-            "$([char]0x2605) License Utilization",
-            "$([char]0x2713) Compliance Trend Chart",
-            "$([char]0x2B06) Enrollment Trend Chart",
-            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
-            "$([char]0x2190) Back to Home"
+            'Stale Devices Report',
+            'Stale Users Report',
+            'App Install Failures',
+            'License Utilization',
+            'Compliance Trend Chart',
+            'Enrollment Trend Chart',
+            '-------------',
+            'Back to Home'
         )
 
-        $selection = Show-InTUIMenu -Title "[DarkOrange]$([char]0x25A3) Reports[/]" -Choices $reportChoices
+        $selection = Show-InTUIMenu -Title "[DarkOrange]Reports[/]" -Choices $reportChoices
 
         Write-InTUILog -Message "Reports view selection" -Context @{ Selection = $selection }
 
-        # Strip icon prefix for switch matching
-        $cleanSelection = $selection -replace "^.{1,2} ", ""
-
-        switch ($cleanSelection) {
+        switch ($selection) {
             'Stale Devices Report' {
                 Show-InTUIStaleDevicesReport
+            }
+            'Stale Users Report' {
+                Show-InTUIStaleUsersReport
             }
             'App Install Failures' {
                 Show-InTUIAppInstallFailures
@@ -68,7 +69,7 @@ function Show-InTUIStaleDevicesReport {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Reports', 'Stale Devices')
 
-    $daysInput = Read-SpectreText -Message "[DarkOrange]Enter days threshold for stale devices[/]" -DefaultAnswer "30"
+    $daysInput = Read-InTUITextInput -Message "[DarkOrange]Enter days threshold for stale devices[/]" -DefaultAnswer "30"
     $days = 30
     if ($daysInput -match '^\d+$') {
         $days = [int]$daysInput
@@ -115,11 +116,9 @@ function Show-InTUIStaleDevicesReport {
         )
     }
 
-    Show-InTUIStatusBar -Total ($devices.Count ?? $devices.Results.Count) -Showing $devices.Results.Count -FilterText "Stale > $days days"
+    Show-InTUIStatusBar -Total $devices.TotalCount -Showing $devices.Results.Count -FilterText "Stale > $days days"
 
-    Show-InTUITable -Title "Stale Devices Report" -Columns @('Device Name', 'OS', 'Last Sync', 'Days Since Sync', 'User', 'Compliance') -Rows $rows -BorderColor DarkOrange
-
-    Read-InTUIKey
+    Show-InTUISortableTable -Title "Stale Devices Report" -Columns @('Device Name', 'OS', 'Last Sync', 'Days Since Sync', 'User', 'Compliance') -Rows $rows -BorderColor DarkOrange
 }
 
 function Show-InTUIAppInstallFailures {
@@ -160,7 +159,7 @@ function Show-InTUIAppInstallFailures {
         $choiceMap = Get-InTUIChoiceMap -Choices $appChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($apps.Count ?? $apps.Results.Count) -Showing $apps.Results.Count
+        Show-InTUIStatusBar -Total $apps.TotalCount -Showing $apps.Results.Count
 
         $selection = Show-InTUIMenu -Title "[DarkOrange]Select an app to check failures[/]" -Choices $menuChoices
 
@@ -217,22 +216,88 @@ function Show-InTUIAppFailureDetail {
 
     Write-InTUILog -Message "App install failures found" -Context @{ AppName = $AppName; FailureCount = $failures.Count }
 
-    $rows = @()
-    foreach ($status in $failures) {
-        $rows += , @(
-            ($status.deviceName ?? 'N/A'),
-            "[red]$($status.installState)[/]",
-            ($status.errorCode ?? 'N/A'),
-            ($status.userPrincipalName ?? 'N/A'),
-            (Format-InTUIDate -DateString $status.lastSyncDateTime)
-        )
+    $exitDrillDown = $false
+
+    while (-not $exitDrillDown) {
+        Clear-Host
+        Show-InTUIHeader
+        Show-InTUIBreadcrumb -Path @('Home', 'Reports', 'App Install Failures', $AppName)
+
+        $rows = @()
+        $failureChoices = @()
+        foreach ($status in $failures) {
+            $rows += , @(
+                ($status.deviceName ?? 'N/A'),
+                "[red]$($status.installState)[/]",
+                ($status.errorCode ?? 'N/A'),
+                ($status.userPrincipalName ?? 'N/A'),
+                (Format-InTUIDate -DateString $status.lastSyncDateTime)
+            )
+            $errorHex = if ($status.errorCode) {
+                '0x{0:X8}' -f [int64]$status.errorCode
+            } else { 'N/A' }
+            $failureChoices += "[white]$(ConvertTo-InTUISafeMarkup -Text ($status.deviceName ?? 'N/A'))[/] [grey]| $errorHex[/]"
+        }
+
+        Show-InTUIStatusBar -Total $failures.Count -Showing $failures.Count -FilterText "Failed installs"
+
+        Render-InTUITable -Title "Install Failures - $AppName" -Columns @('Device', 'Status', 'Error Code', 'User', 'Last Sync') -Rows $rows -BorderColor DarkOrange
+
+        $choiceMap = Get-InTUIChoiceMap -Choices $failureChoices
+        $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
+
+        $selection = Show-InTUIMenu -Title "[DarkOrange]Select a failure for details[/]" -Choices $menuChoices
+
+        if ($selection -eq 'Back') {
+            $exitDrillDown = $true
+        }
+        elseif ($selection -ne '─────────────') {
+            $idx = $choiceMap.IndexMap[$selection]
+            if ($null -ne $idx -and $idx -lt $failures.Count) {
+                $failureStatus = $failures[$idx]
+                $errorHex = if ($failureStatus.errorCode) {
+                    '0x{0:X8}' -f [int64]$failureStatus.errorCode
+                } else { 'N/A' }
+
+                $errorInfo = Get-InTUIErrorCodeInfo -ErrorCode $errorHex
+
+                Clear-Host
+                Show-InTUIHeader
+                Show-InTUIBreadcrumb -Path @('Home', 'Reports', 'App Install Failures', $AppName, ($failureStatus.deviceName ?? 'N/A'))
+
+                if ($errorInfo) {
+                    $drillContent = @"
+[bold white]Error Code:[/]   $errorHex
+[grey]Description:[/]  [white]$($errorInfo.Description)[/]
+[grey]Category:[/]     [yellow]$($errorInfo.Category)[/]
+
+[bold]Remediation:[/]
+[green]$($errorInfo.Remediation)[/]
+
+[grey]Device:[/]       $($failureStatus.deviceName ?? 'N/A')
+[grey]User:[/]         $($failureStatus.userPrincipalName ?? 'N/A')
+[grey]Last Sync:[/]    $(Format-InTUIDate -DateString $failureStatus.lastSyncDateTime)
+"@
+                }
+                else {
+                    $drillContent = @"
+[bold white]Error Code:[/]   $errorHex
+[yellow]Unknown error code.[/]
+
+Check Microsoft Intune troubleshooting docs for this error code.
+Review IME logs on the device: C:\ProgramData\Microsoft\IntuneManagementExtension\Logs
+
+[grey]Device:[/]       $($failureStatus.deviceName ?? 'N/A')
+[grey]User:[/]         $($failureStatus.userPrincipalName ?? 'N/A')
+[grey]Last Sync:[/]    $(Format-InTUIDate -DateString $failureStatus.lastSyncDateTime)
+"@
+                }
+
+                Show-InTUIPanel -Title "[DarkOrange]Error Details[/]" -Content $drillContent -BorderColor DarkOrange
+                Read-InTUIKey
+            }
+        }
     }
-
-    Show-InTUIStatusBar -Total $failures.Count -Showing $failures.Count -FilterText "Failed installs"
-
-    Show-InTUITable -Title "Install Failures - $AppName" -Columns @('Device', 'Status', 'Error Code', 'User', 'Last Sync') -Rows $rows -BorderColor DarkOrange
-
-    Read-InTUIKey
 }
 
 function Show-InTUILicenseUtilization {
@@ -288,9 +353,7 @@ function Show-InTUILicenseUtilization {
         )
     }
 
-    Show-InTUITable -Title "License Utilization" -Columns @('License', 'Total', 'Assigned', 'Available', 'Utilization %') -Rows $rows -BorderColor DarkOrange
-
-    Read-InTUIKey
+    Show-InTUISortableTable -Title "License Utilization" -Columns @('License', 'Total', 'Assigned', 'Available', 'Utilization %') -Rows $rows -BorderColor DarkOrange
 }
 
 function Show-InTUIComplianceTrendChart {
@@ -322,17 +385,14 @@ function Show-InTUIComplianceTrendChart {
         NonCompliant = $data.nonCompliantDeviceCount
     }
 
-    Write-SpectreHost "[bold]Device Compliance Status[/]"
-    Write-SpectreHost ""
-
     # Build chart data
     $chartData = @(
-        @{ Label = "Compliant"; Value = ($data.compliantDeviceCount ?? 0); Color = "Green" }
-        @{ Label = "Non-Compliant"; Value = ($data.nonCompliantDeviceCount ?? 0); Color = "Red" }
-        @{ Label = "In Grace Period"; Value = ($data.inGracePeriodCount ?? 0); Color = "Yellow" }
-        @{ Label = "Conflict"; Value = ($data.conflictDeviceCount ?? 0); Color = "Orange1" }
-        @{ Label = "Error"; Value = ($data.errorCount ?? 0); Color = "Red3" }
-        @{ Label = "Not Evaluated"; Value = ($data.notEvaluatedDeviceCount ?? 0); Color = "Grey" }
+        @{ Label = "Compliant"; Value = ($data.compliantDeviceCount ?? 0); Color = "green" }
+        @{ Label = "Non-Compliant"; Value = ($data.nonCompliantDeviceCount ?? 0); Color = "red" }
+        @{ Label = "In Grace Period"; Value = ($data.inGracePeriodCount ?? 0); Color = "yellow" }
+        @{ Label = "Conflict"; Value = ($data.conflictDeviceCount ?? 0); Color = "orange" }
+        @{ Label = "Error"; Value = ($data.errorCount ?? 0); Color = "red" }
+        @{ Label = "Not Evaluated"; Value = ($data.notEvaluatedDeviceCount ?? 0); Color = "grey" }
     )
 
     # Filter out zero values for cleaner display
@@ -344,15 +404,7 @@ function Show-InTUIComplianceTrendChart {
         return
     }
 
-    # Create bar chart using PwshSpectreConsole
-    $chartItems = @()
-    foreach ($item in $chartData) {
-        $chartItems += New-SpectreChartItem -Label $item.Label -Value $item.Value -Color $item.Color
-    }
-
-    $chartItems | Format-SpectreBarChart -Label "Compliance Distribution" -Width 60
-
-    Write-SpectreHost ""
+    Render-InTUIBarChart -Title "Compliance Distribution" -Items $chartData
 
     # Summary table
     $total = ($data.compliantDeviceCount ?? 0) + ($data.nonCompliantDeviceCount ?? 0) +
@@ -408,16 +460,13 @@ function Show-InTUIEnrollmentTrendChart {
         Android = $osSummary.androidCount
     }
 
-    Write-SpectreHost "[bold]Device Enrollment by Platform[/]"
-    Write-SpectreHost ""
-
     # Build chart data
     $chartData = @(
-        @{ Label = "Windows"; Value = ($osSummary.windowsCount ?? 0); Color = "Blue" }
-        @{ Label = "iOS/iPadOS"; Value = ($osSummary.iosCount ?? 0); Color = "Grey" }
-        @{ Label = "macOS"; Value = ($osSummary.macOSCount ?? 0); Color = "Grey54" }
-        @{ Label = "Android"; Value = ($osSummary.androidCount ?? 0); Color = "Green" }
-        @{ Label = "Linux"; Value = ($osSummary.linuxCount ?? 0); Color = "Yellow" }
+        @{ Label = "Windows"; Value = ($osSummary.windowsCount ?? 0); Color = "blue" }
+        @{ Label = "iOS/iPadOS"; Value = ($osSummary.iosCount ?? 0); Color = "grey" }
+        @{ Label = "macOS"; Value = ($osSummary.macOSCount ?? 0); Color = "grey" }
+        @{ Label = "Android"; Value = ($osSummary.androidCount ?? 0); Color = "green" }
+        @{ Label = "Linux"; Value = ($osSummary.linuxCount ?? 0); Color = "yellow" }
     )
 
     # Filter out zero values
@@ -429,15 +478,7 @@ function Show-InTUIEnrollmentTrendChart {
         return
     }
 
-    # Create bar chart
-    $chartItems = @()
-    foreach ($item in $chartData) {
-        $chartItems += New-SpectreChartItem -Label $item.Label -Value $item.Value -Color $item.Color
-    }
-
-    $chartItems | Format-SpectreBarChart -Label "Enrollment by Platform" -Width 60
-
-    Write-SpectreHost ""
+    Render-InTUIBarChart -Title "Enrollment by Platform" -Items $chartData
 
     # Summary table
     $total = $data.enrolledDeviceCount ?? 0
@@ -458,4 +499,66 @@ function Show-InTUIEnrollmentTrendChart {
     Show-InTUIPanel -Title "[DarkOrange]Enrollment Summary[/]" -Content $summaryContent -BorderColor DarkOrange
 
     Read-InTUIKey
+}
+
+function Show-InTUIStaleUsersReport {
+    <#
+    .SYNOPSIS
+        Displays a report of users who have not signed in within a specified number of days.
+    #>
+    [CmdletBinding()]
+    param()
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Reports', 'Stale Users')
+
+    $daysInput = Read-InTUITextInput -Message "[DarkOrange]Enter days threshold for stale users[/]" -DefaultAnswer "90"
+    $days = 90
+    if ($daysInput -match '^\d+$') {
+        $days = [int]$daysInput
+    }
+
+    Write-InTUILog -Message "Running stale users report" -Context @{ DaysThreshold = $days }
+
+    $cutoff = [DateTime]::UtcNow.AddDays(-$days).ToString('yyyy-MM-ddTHH:mm:ssZ')
+
+    $users = Show-InTUILoading -Title "[DarkOrange]Loading stale users...[/]" -ScriptBlock {
+        Get-InTUIPagedResults -Uri '/users' -PageSize 50 `
+            -Filter "signInActivity/lastSignInDateTime le $cutoff" `
+            -Select 'id,displayName,userPrincipalName,signInActivity,assignedLicenses' `
+            -Headers @{ ConsistencyLevel = 'eventual' } `
+            -IncludeCount
+    }
+
+    if ($null -eq $users -or $users.Results.Count -eq 0) {
+        Show-InTUIWarning "No stale users found (threshold: $days days)."
+        Read-InTUIKey
+        return
+    }
+
+    Write-InTUILog -Message "Stale users found" -Context @{ Count = $users.Results.Count; DaysThreshold = $days }
+
+    $rows = @()
+    foreach ($user in $users.Results) {
+        $lastSignIn = $user.signInActivity.lastSignInDateTime
+        $daysSince = if ($lastSignIn) {
+            ([DateTime]::UtcNow - [DateTime]::Parse($lastSignIn)).Days
+        } else { 'Never' }
+
+        $formattedDate = Format-InTUIDate -DateString $lastSignIn
+        $licenseCount = if ($user.assignedLicenses) { @($user.assignedLicenses).Count } else { 0 }
+
+        $rows += , @(
+            ($user.displayName ?? 'N/A'),
+            ($user.userPrincipalName ?? 'N/A'),
+            $formattedDate,
+            "$daysSince",
+            "$licenseCount"
+        )
+    }
+
+    Show-InTUIStatusBar -Total $users.TotalCount -Showing $users.Results.Count -FilterText "Stale > $days days"
+
+    Show-InTUISortableTable -Title "Stale Users Report" -Columns @('Display Name', 'UPN', 'Last Sign-In', 'Days Since', 'Licenses') -Rows $rows -BorderColor DarkOrange
 }

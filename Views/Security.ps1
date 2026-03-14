@@ -14,22 +14,19 @@ function Show-InTUISecurityView {
         Show-InTUIBreadcrumb -Path @('Home', 'Security')
 
         $choices = @(
-            "$([char]0x26E8) Security Baselines",
-            "$([char]0x2699) Endpoint Protection Policies",
-            "$([char]0x26A0) Microsoft Defender Overview",
-            "$([char]0x2318) BitLocker Recovery Keys",
-            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
-            "$([char]0x2190) Back to Home"
+            'Security Baselines',
+            'Endpoint Protection Policies',
+            'Microsoft Defender Overview',
+            'BitLocker Recovery Keys',
+            '-------------',
+            'Back to Home'
         )
 
-        $selection = Show-InTUIMenu -Title "[red]$([char]0x26E8) Security[/]" -Choices $choices
+        $selection = Show-InTUIMenu -Title "[red]Security[/]" -Choices $choices
 
         Write-InTUILog -Message "Security view selection" -Context @{ Selection = $selection }
 
-        # Strip icon prefix for switch matching
-        $cleanSelection = $selection -replace "^.{1,2} ", ""
-
-        switch ($cleanSelection) {
+        switch ($selection) {
             'Security Baselines' {
                 Show-InTUISecurityBaselineList
             }
@@ -97,7 +94,7 @@ function Show-InTUISecurityBaselineList {
         $choiceMap = Get-InTUIChoiceMap -Choices $intentChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($intents.Count ?? $intents.Results.Count) -Showing $intents.Results.Count
+        Show-InTUIStatusBar -Total $intents.TotalCount -Showing $intents.Results.Count
 
         $selection = Show-InTUIMenu -Title "[red]Select a baseline[/]" -Choices $menuChoices
 
@@ -536,7 +533,7 @@ function Show-InTUIBitLockerKeys {
         Show-InTUIHeader
         Show-InTUIBreadcrumb -Path @('Home', 'Security', 'BitLocker Recovery Keys')
 
-        $searchTerm = Read-SpectreText -Message "[red]Enter device name or device ID to search[/]"
+        $searchTerm = Read-InTUITextInput -Message "[red]Enter device name or device ID to search[/]"
 
         if (-not $searchTerm) {
             $exitView = $true
@@ -793,8 +790,8 @@ function Show-InTUIDefenderOverview {
 
     # Show devices with high/severe threats
     if ($data.DevicesWithThreats.Count -gt 0) {
-        Write-SpectreHost "[red bold]Devices with High/Severe Threats:[/]"
-        Write-SpectreHost ""
+        Write-InTUIText "[red bold]Devices with High/Severe Threats:[/]"
+        Write-InTUIText ""
 
         $rows = @()
         foreach ($device in $data.DevicesWithThreats) {

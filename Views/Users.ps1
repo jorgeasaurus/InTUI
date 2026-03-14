@@ -14,21 +14,18 @@ function Show-InTUIUsersView {
         Show-InTUIBreadcrumb -Path @('Home', 'Users')
 
         $userChoices = @(
-            "$([char]0x263A) All Users",
-            "$([char]0x2605) Licensed Users",
-            "$([char]0x2315) Search Users",
-            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
-            "$([char]0x2190) Back to Home"
+            'All Users',
+            'Licensed Users',
+            'Search Users',
+            '-------------',
+            'Back to Home'
         )
 
-        $selection = Show-InTUIMenu -Title "[yellow]$([char]0x263A) Users[/]" -Choices $userChoices
+        $selection = Show-InTUIMenu -Title "[yellow]Users[/]" -Choices $userChoices
 
         Write-InTUILog -Message "Users view selection" -Context @{ Selection = $selection }
 
-        # Strip icon prefix for switch matching
-        $cleanSelection = $selection -replace "^.{1,2} ", ""
-
-        switch ($cleanSelection) {
+        switch ($selection) {
             'All Users' {
                 Show-InTUIUserList
             }
@@ -36,7 +33,7 @@ function Show-InTUIUsersView {
                 Show-InTUIUserList -LicensedOnly
             }
             'Search Users' {
-                $searchTerm = Read-SpectreText -Message "[yellow]$([char]0x2315) Search users by name or email[/]"
+                $searchTerm = Read-InTUITextInput -Message "[yellow]Search users by name or email[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching users" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIUserList -SearchTerm $searchTerm
@@ -125,7 +122,7 @@ function Show-InTUIUserList {
         $choiceMap = Get-InTUIChoiceMap -Choices $userChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($users.Count ?? $filteredUsers.Count) -Showing $filteredUsers.Count -FilterText $SearchTerm
+        Show-InTUIStatusBar -Total $users.TotalCount -Showing $filteredUsers.Count -FilterText $SearchTerm
 
         $selection = Show-InTUIMenu -Title "[yellow]Select a user[/]" -Choices $menuChoices
 
@@ -170,6 +167,8 @@ function Show-InTUIUserDetail {
 
         Show-InTUIBreadcrumb -Path @('Home', 'Users', $user.displayName)
 
+        Add-InTUIHistoryEntry -ViewType 'User' -ViewId $UserId -DisplayName $user.displayName
+
         $enabled = if ($user.accountEnabled) { '[green]Enabled[/]' } else { '[red]Disabled[/]' }
 
         $propsContent = @"
@@ -198,6 +197,7 @@ function Show-InTUIUserDetail {
             'View App Installations',
             'View Group Memberships',
             'View Licenses',
+            "What's Applied?",
             '─────────────',
             'Back to Users'
         )
@@ -218,6 +218,9 @@ function Show-InTUIUserDetail {
             }
             'View Licenses' {
                 Show-InTUIUserLicenses -UserId $UserId -UserName $user.displayName -Licenses $user.assignedLicenses
+            }
+            "What's Applied?" {
+                Show-InTUIUserWhatsApplied -UserId $UserId -UserName $user.displayName
             }
             'Back to Users' {
                 $exitDetail = $true
@@ -373,6 +376,7 @@ function Show-InTUIUserGroups {
     }
 
     $rows = @()
+    $groupChoices = @()
     foreach ($group in $groupsOnly) {
         $groupType = Get-InTUIGroupType -Group $group
         $rows += , @(
@@ -380,10 +384,22 @@ function Show-InTUIUserGroups {
             $groupType,
             ($group.description ?? 'N/A')
         )
+        $groupChoices += "[white]$(ConvertTo-InTUISafeMarkup -Text $group.displayName)[/] [grey]| $groupType[/]"
     }
 
-    Show-InTUITable -Title "Group Memberships for $UserName" -Columns @('Group Name', 'Type', 'Description') -Rows $rows
-    Read-InTUIKey
+    Render-InTUITable -Title "Group Memberships for $UserName" -Columns @('Group Name', 'Type', 'Description') -Rows $rows
+
+    $choiceMap = Get-InTUIChoiceMap -Choices $groupChoices
+    $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
+
+    $selection = Show-InTUIMenu -Title "[yellow]View group details[/]" -Choices $menuChoices
+
+    if ($selection -ne 'Back' -and $selection -ne '─────────────') {
+        $idx = $choiceMap.IndexMap[$selection]
+        if ($null -ne $idx -and $idx -lt @($groupsOnly).Count) {
+            Show-InTUIGroupDetail -GroupId @($groupsOnly)[$idx].id
+        }
+    }
 }
 
 function Show-InTUIUserLicenses {

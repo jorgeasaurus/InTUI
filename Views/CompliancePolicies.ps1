@@ -45,7 +45,7 @@ function Show-InTUICompliancePoliciesView {
                 Show-InTUICompliancePolicyList -PlatformFilter 'Android'
             }
             'Search Policies' {
-                $searchTerm = Read-SpectreText -Message "[cyan]Search policies by name[/]"
+                $searchTerm = Read-InTUITextInput -Message "[cyan]Search policies by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching compliance policies" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUICompliancePolicyList -SearchTerm $searchTerm
@@ -223,6 +223,8 @@ function Show-InTUICompliancePolicyDetail {
         }
 
         Show-InTUIBreadcrumb -Path @('Home', 'Compliance Policies', $policy.displayName)
+
+        Add-InTUIHistoryEntry -ViewType 'CompliancePolicy' -ViewId $PolicyId -DisplayName $policy.displayName
 
         $typeInfo = Get-InTUICompliancePolicyType -ODataType $policy.'@odata.type'
 

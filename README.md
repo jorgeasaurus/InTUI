@@ -1,6 +1,6 @@
 # InTUI - Intune Terminal User Interface
 
-A PowerShell Spectre Console TUI for managing Microsoft Intune resources via Microsoft Graph API. Mimics the Intune admin center experience directly in your terminal.
+A PowerShell terminal UI for managing Microsoft Intune resources via Microsoft Graph API. Uses a custom ANSI TUI engine with Catppuccin Mocha colors, Unicode box-drawing, gradient decorations, and flicker-free cursor-positioned redraws. Mimics the Intune admin center experience directly in your terminal.
 
 ![PowerShell](https://img.shields.io/badge/PowerShell-7.2+-blue)
 ![Graph API](https://img.shields.io/badge/Microsoft%20Graph-v1.0%20%7C%20beta-green)
@@ -20,7 +20,7 @@ A PowerShell Spectre Console TUI for managing Microsoft Intune resources via Mic
 - **Security** - Browse security baselines, endpoint protection policies, lookup BitLocker recovery keys, and Defender overview dashboard
 - **Conditional Access** - Browse CA policies (read-only), view named locations, and filter sign-in logs
 - **Reports** - Stale device reports, app install failure summaries, license utilization, compliance trend charts, and enrollment trend charts
-- **Multi-Tenant** - Save tenant profiles for quick switching, tenant health summary on connect, and side-by-side tenant comparison
+- **Multi-Tenant** - Save tenant profiles for quick switching and tenant health summary on connect
 - **Dashboard** - Summary panels with device, app, user, and group counts plus compliance statistics, with live auto-refresh mode
 
 ### Tools
@@ -33,16 +33,16 @@ A PowerShell Spectre Console TUI for managing Microsoft Intune resources via Mic
 
 ### Navigation
 
+- Arrow-key interactive menus with accordion sections (falls back to numbered input on non-interactive terminals)
 - Breadcrumb trails show your current location
 - Drill-through navigation between entities (e.g., User -> Devices -> Device Detail)
-- Back navigation at every level
-- Color-coded compliance states and OS icons
+- Back navigation at every level (Escape key)
+- Catppuccin Mocha color palette with gradient-decorated borders
 
 ## Prerequisites
 
 - PowerShell 7.2+
 - [Microsoft.Graph.Authentication](https://www.powershellgallery.com/packages/Microsoft.Graph.Authentication) module
-- [PwshSpectreConsole](https://www.powershellgallery.com/packages/PwshSpectreConsole) module
 
 ## Installation
 
@@ -58,14 +58,17 @@ cd InTUI
 ## Usage
 
 ```powershell
-# Launch InTUI (will prompt for Graph authentication)
+# Launch directly
 ./Start-InTUI.ps1
 
 # Connect to a specific tenant
 ./Start-InTUI.ps1 -TenantId "contoso.onmicrosoft.com"
 
-# Or import as a module
+# Or import as a module and use the alias
 Import-Module ./InTUI.psd1
+intui
+
+# Full function names also work
 Connect-InTUI
 Start-InTUI
 ```
@@ -78,15 +81,28 @@ InTUI/
 ├── InTUI.psd1                # Module manifest
 ├── InTUI.psm1                # Root module
 ├── Private/
+│   ├── AnsiPalette.ps1       # Catppuccin Mocha colors, markup parser, Write-InTUIText
+│   ├── AnsiGradient.ps1      # Per-character RGB gradient interpolation
+│   ├── AnsiWidth.ps1         # Console width detection
+│   ├── AnsiCapability.ps1    # Arrow key and true color detection
+│   ├── RenderMenuBox.ps1     # Unicode-bordered menu box renderer
+│   ├── RenderPanel.ps1       # Content panel with gradient borders
+│   ├── RenderTable.ps1       # Auto-width column table renderer
+│   ├── RenderBarChart.ps1    # Horizontal bar chart with block chars
+│   ├── MenuArrowSingle.ps1   # Arrow-key single selection
+│   ├── MenuArrowMulti.ps1    # Arrow-key multi-select (Space/A/Enter)
+│   ├── MenuArrowAccordion.ps1# Accordion-style expandable menu
+│   ├── MenuClassic.ps1       # Numbered input fallback
+│   ├── InputPrompt.ps1       # Text input and Y/N confirmation
+│   ├── SpinnerProgress.ps1   # Rotating spinner with elapsed time
+│   ├── UIHelpers.ps1         # High-level UI abstraction layer
 │   ├── GraphHelpers.ps1      # Graph API connection, pagination, requests
-│   ├── UIHelpers.ps1         # Spectre Console UI widgets and helpers
 │   ├── Logging.ps1           # Logging system
 │   ├── Configuration.ps1     # Configuration management
 │   ├── TenantProfiles.ps1    # Multi-tenant profile switching
 │   ├── BulkOperations.ps1    # Bulk device actions and CSV export
 │   ├── Cache.ps1             # Local response caching with TTL
 │   ├── ScriptRecording.ps1   # Record and export Graph API actions
-│   ├── TenantComparison.ps1  # Side-by-side tenant metrics
 │   ├── KeyboardShortcuts.ps1 # Shortcut bar and help overlay
 │   ├── Bookmarks.ps1         # Bookmark management
 │   └── GlobalSearch.ps1      # Cross-entity search
@@ -190,7 +206,7 @@ No other Microsoft.Graph sub-modules are required. This keeps the dependency foo
 
 ### Reporting & Dashboards
 
-- [x] Compliance trend charts using Spectre bar charts
+- [x] Compliance trend charts with ANSI bar charts
 - [x] Device enrollment trend by platform
 - [x] Stale device report (no check-in for X days)
 - [x] App install failure summary with error codes
@@ -199,7 +215,6 @@ No other Microsoft.Graph sub-modules are required. This keeps the dependency foo
 ### Multi-Tenant Support
 
 - [x] Saved tenant profiles with quick switching
-- [x] Side-by-side tenant comparison views
 - [x] Tenant health summary on connect
 
 ### UX Improvements

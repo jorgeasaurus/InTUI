@@ -77,7 +77,7 @@ function Show-InTUIConfigProfilesView {
                 Show-InTUIConfigProfileList -PlatformFilter 'Android'
             }
             'Search Profiles' {
-                $searchTerm = Read-SpectreText -Message "[cyan]Search profiles by name[/]"
+                $searchTerm = Read-InTUITextInput -Message "[cyan]Search profiles by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching configuration profiles" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIConfigProfileList -SearchTerm $searchTerm
@@ -257,6 +257,8 @@ function Show-InTUICatalogProfileDetail {
 
         Show-InTUIBreadcrumb -Path @('Home', 'Configuration Profiles', $profile.name)
 
+        Add-InTUIHistoryEntry -ViewType 'CatalogProfile' -ViewId $ProfileId -DisplayName $profile.name
+
         $platform = Get-InTUIConfigPolicyPlatform -Platforms $profile.platforms
         $tech = Get-InTUIConfigPolicyTechnology -Technologies $profile.technologies
         $templateName = $profile.templateReference.templateDisplayName
@@ -429,6 +431,8 @@ function Show-InTUILegacyProfileDetail {
 
         Show-InTUIBreadcrumb -Path @('Home', 'Configuration Profiles', $profile.displayName)
 
+        Add-InTUIHistoryEntry -ViewType 'ConfigProfile' -ViewId $ProfileId -DisplayName $profile.displayName
+
         $typeInfo = Get-InTUIConfigProfileType -ODataType $profile.'@odata.type'
 
         $propsContent = @"
@@ -560,9 +564,9 @@ function Show-InTUIProfileConflicts {
 
     Show-InTUITable -Title "Configuration Conflicts - $ProfileName" -Columns @('Device', 'Status', 'User', 'Last Reported') -Rows $rows -BorderColor Orange1
 
-    Write-SpectreHost ""
-    Write-SpectreHost "[grey]Conflicts occur when multiple policies target the same setting with different values.[/]"
-    Write-SpectreHost "[grey]Review assigned policies to resolve conflicts.[/]"
+    Write-InTUIText ""
+    Write-InTUIText "[grey]Conflicts occur when multiple policies target the same setting with different values.[/]"
+    Write-InTUIText "[grey]Review assigned policies to resolve conflicts.[/]"
 
     Read-InTUIKey
 }

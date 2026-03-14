@@ -14,28 +14,25 @@ function Show-InTUIAppsView {
         Show-InTUIBreadcrumb -Path @('Home', 'Apps')
 
         $appChoices = @(
-            "$([char]0x25A1) All Apps",
-            "$([char]0x25A0) Windows Apps",
-            "$([char]0x25CF) iOS/iPadOS Apps",
-            "$([char]0x25C6) macOS Apps",
-            "$([char]0x25B2) Android Apps",
-            "$([char]0x2B58) Web Apps",
-            "$([char]0x25A3) Microsoft 365 Apps",
-            "$([char]0x25A8) App Install Status Monitor",
-            "$([char]0x2630) Bulk Assign Apps",
-            "$([char]0x2315) Search Apps",
-            "$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)$([char]0x2550)",
-            "$([char]0x2190) Back to Home"
+            'All Apps',
+            'Windows Apps',
+            'iOS/iPadOS Apps',
+            'macOS Apps',
+            'Android Apps',
+            'Web Apps',
+            'Microsoft 365 Apps',
+            'App Install Status Monitor',
+            'Bulk Assign Apps',
+            'Search Apps',
+            '-------------',
+            'Back to Home'
         )
 
-        $selection = Show-InTUIMenu -Title "[green]$([char]0x25A6) Apps[/]" -Choices $appChoices
+        $selection = Show-InTUIMenu -Title "[green]Apps[/]" -Choices $appChoices
 
         Write-InTUILog -Message "Apps view selection" -Context @{ Selection = $selection }
 
-        # Strip icon prefix for switch matching
-        $cleanSelection = $selection -replace "^.{1,2} ", ""
-
-        switch ($cleanSelection) {
+        switch ($selection) {
             'All Apps' {
                 Show-InTUIAppList
             }
@@ -64,7 +61,7 @@ function Show-InTUIAppsView {
                 Invoke-InTUIBulkAppAssignment
             }
             'Search Apps' {
-                $searchTerm = Read-SpectreText -Message "[green]$([char]0x2315) Search apps by name[/]"
+                $searchTerm = Read-InTUITextInput -Message "[green]Search apps by name[/]"
                 if ($searchTerm) {
                     Write-InTUILog -Message "Searching apps" -Context @{ SearchTerm = $searchTerm }
                     Show-InTUIAppList -SearchTerm $searchTerm
@@ -173,7 +170,7 @@ function Show-InTUIAppList {
         $choiceMap = Get-InTUIChoiceMap -Choices $appChoices
         $menuChoices = @($choiceMap.Choices + '─────────────' + 'Back')
 
-        Show-InTUIStatusBar -Total ($apps.Count ?? $apps.Results.Count) -Showing $apps.Results.Count
+        Show-InTUIStatusBar -Total $apps.TotalCount -Showing $apps.Results.Count
 
         $selection = Show-InTUIMenu -Title "[green]Select an app[/]" -Choices $menuChoices
 
@@ -248,6 +245,8 @@ function Show-InTUIAppDetail {
         }
 
         Show-InTUIBreadcrumb -Path @('Home', 'Apps', $app.displayName)
+
+        Add-InTUIHistoryEntry -ViewType 'App' -ViewId $AppId -DisplayName $app.displayName
 
         $appType = Get-InTUIAppTypeFriendlyName -ODataType $app.'@odata.type'
 
@@ -505,6 +504,7 @@ function Show-InTUIAppAssignments {
     }
 
     $rows = @()
+    $groupAssignments = @()
     foreach ($assignment in $assignments.value) {
         $intent = switch ($assignment.intent) {
             'required'         { '[green]Required[/]' }
@@ -523,10 +523,30 @@ function Show-InTUIAppAssignments {
         }
 
         $rows += , @($intent, $targetType)
+
+        # Track group assignments for cross-reference
+        if ($assignment.target.groupId) {
+            $groupAssignments += $assignment.target.groupId
+        }
     }
 
-    Show-InTUITable -Title "App Assignments" -Columns @('Intent', 'Target') -Rows $rows
-    Read-InTUIKey
+    Render-InTUITable -Title "App Assignments" -Columns @('Intent', 'Target') -Rows $rows
+
+    if ($groupAssignments.Count -gt 0) {
+        $groupChoices = @()
+        foreach ($gId in ($groupAssignments | Sort-Object -Unique)) {
+            $groupChoices += $gId
+        }
+        $groupChoices += 'Back'
+
+        $selection = Show-InTUIMenu -Title "[green]View group detail[/]" -Choices $groupChoices
+        if ($selection -ne 'Back') {
+            Show-InTUIGroupDetail -GroupId $selection
+        }
+    }
+    else {
+        Read-InTUIKey
+    }
 }
 
 function Show-InTUIAppDeviceStatus {
@@ -638,9 +658,9 @@ function Show-InTUIAppInstallStatusMonitor {
         return
     }
 
-    Write-SpectreHost "[bold]App Install Status Summary[/]"
-    Write-SpectreHost "[grey]Select an app to view detailed install status[/]"
-    Write-SpectreHost ""
+    Write-InTUIText "[bold]App Install Status Summary[/]"
+    Write-InTUIText "[grey]Select an app to view detailed install status[/]"
+    Write-Host ""
 
     $choices = @()
     foreach ($app in $apps.Results) {
@@ -685,9 +705,9 @@ function Invoke-InTUIBulkAppAssignment {
         return
     }
 
-    Write-SpectreHost "[bold]Bulk App Assignment[/]"
-    Write-SpectreHost "[grey]Select multiple apps to assign to a group[/]"
-    Write-SpectreHost ""
+    Write-InTUIText "[bold]Bulk App Assignment[/]"
+    Write-InTUIText "[grey]Select multiple apps to assign to a group[/]"
+    Write-Host ""
 
     # Multi-select apps
     $appChoices = @()
@@ -696,7 +716,7 @@ function Invoke-InTUIBulkAppAssignment {
         $appChoices += "$(ConvertTo-InTUISafeMarkup -Text $app.displayName) [grey]($appType)[/]"
     }
 
-    $selectedApps = Read-SpectreMultiSelection -Title "[green]Select apps (Space to select, Enter to confirm)[/]" -Choices $appChoices -PageSize 15
+    $selectedApps = Show-InTUIMultiSelect -Title "[green]Select apps (Space to select, Enter to confirm)[/]" -Choices $appChoices -PageSize 15
 
     if (-not $selectedApps -or $selectedApps.Count -eq 0) {
         Show-InTUIWarning "No apps selected."
@@ -715,8 +735,8 @@ function Invoke-InTUIBulkAppAssignment {
         }
     }
 
-    Write-SpectreHost ""
-    Write-SpectreHost "[white]Selected $($selectedAppObjects.Count) app(s)[/]"
+    Write-Host ""
+    Write-InTUIText "[white]Selected $($selectedAppObjects.Count) app(s)[/]"
 
     # Select intent
     $intentChoices = @(

@@ -37,50 +37,63 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Bootstrap Build Environment
         shell: pwsh
-        run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
-          Install-Module -Name Pester -Force -Scope CurrentUser -MinimumVersion 5.0.0
+        run: ./build.ps1
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
-        run: |
-          $results = Invoke-ScriptAnalyzer -Path . -Recurse -ExcludeRule PSAvoidUsingWriteHost
-          $results | Format-Table -AutoSize
-          if ($results | Where-Object { $_.Severity -eq 'Error' }) {
-            throw "PSScriptAnalyzer found errors"
-          }
+        run: ./build.ps1 -Task Analyze
 
       - name: Run Pester Tests
         shell: pwsh
-        run: |
-          $config = New-PesterConfiguration
-          $config.Run.Path = './Tests'
-          $config.Output.Verbosity = 'Detailed'
-          $config.TestResult.Enabled = $true
-          $config.TestResult.OutputPath = 'TestResults.xml'
-          $config.TestResult.OutputFormat = 'NUnitXml'
-          Invoke-Pester -Configuration $config
+        run: ./build.ps1 -Task Test
 
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}
-          path: TestResults.xml
+          path: build/TestResults/TestResults.xml
           if-no-files-found: warn
+
+      - name: Build Module
+        shell: pwsh
+        run: ./build.ps1 -Task Build
+
+      - name: Upload Build Artifacts
+        if: success() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: module-build
+          path: build/InTUI/
+          if-no-files-found: error
 
   release:
     name: Publish and Release
     needs: build
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: module-build
+          path: build/InTUI/
+
+      - name: Verify Build Artifacts
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build/InTUI/InTUI.psd1)) {
+            throw "Build artifacts missing."
+          }
+          $manifest = Test-ModuleManifest -Path build/InTUI/InTUI.psd1
+          Write-Host "Module: $($manifest.Name) v$($manifest.Version)"
+          Write-Host "Files: $((Get-ChildItem -Path build/InTUI -Recurse -File).Count)"
 
       - name: Get Module Info
         id: module_info
@@ -89,11 +102,7 @@ jobs:
           $manifest = Import-PowerShellDataFile -Path ./InTUI.psd1
           "version=$($manifest.ModuleVersion)" >> $env:GITHUB_OUTPUT
           "release_notes<<EOF" >> $env:GITHUB_OUTPUT
-          if ($manifest.PrivateData.PSData.ReleaseNotes) {
-            $manifest.PrivateData.PSData.ReleaseNotes >> $env:GITHUB_OUTPUT
-          } else {
-            "See commits for changes." >> $env:GITHUB_OUTPUT
-          }
+          ($manifest.PrivateData.PSData.ReleaseNotes ?? 'No release notes.') >> $env:GITHUB_OUTPUT
           "EOF" >> $env:GITHUB_OUTPUT
 
       - name: Validate Tag Matches Module Version
@@ -103,7 +112,7 @@ jobs:
           $moduleVersion = $manifest.ModuleVersion
           $tagVersion = '${{ github.ref_name }}' -replace '^v', ''
           if ($moduleVersion -ne $tagVersion) {
-            throw "Tag version ($tagVersion) does not match module version ($moduleVersion). Please update the module manifest."
+            throw "Tag version ($tagVersion) does not match module version ($moduleVersion). Update the manifest first."
           }
           Write-Host "Version validated: $moduleVersion"
 
@@ -113,26 +122,15 @@ jobs:
           PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
         run: |
           if (-not $env:PSGALLERY_API_KEY) {
-            throw "PSGALLERY_API_KEY secret is not set"
+            throw "PSGALLERY_API_KEY secret is not set."
           }
-          Publish-Module -Path . -NuGetApiKey $env:PSGALLERY_API_KEY -Repository PSGallery -Force
+          Publish-Module -Path ./build/InTUI -NuGetApiKey $env:PSGALLERY_API_KEY -Repository PSGallery -Force
 
       - name: Create Release Archive
         shell: pwsh
         run: |
           $version = '${{ steps.module_info.outputs.version }}'
-          $zipName = "InTUI-v$version.zip"
-          $filesToInclude = @(
-            'InTUI.psd1',
-            'InTUI.psm1',
-            'Public',
-            'Private',
-            'Views',
-            'CommandMappings.ps1',
-            'Start-InTUI.ps1'
-          )
-          Compress-Archive -Path $filesToInclude -DestinationPath "./$zipName" -Force
-          Write-Host "Created release archive: $zipName"
+          Compress-Archive -Path ./build/InTUI/* -DestinationPath "./build/InTUI-v$version.zip" -Force
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631
@@ -147,11 +145,18 @@ jobs:
             Install-Module -Name InTUI -Scope CurrentUser
             ```
 
+            ### Usage
+
+            ```powershell
+            Import-Module InTUI
+            intui
+            ```
+
             ### Release Notes
 
             ${{ steps.module_info.outputs.release_notes }}
           draft: false
           prerelease: false
-          files: InTUI-v${{ steps.module_info.outputs.version }}.zip
+          files: build/InTUI-v${{ steps.module_info.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

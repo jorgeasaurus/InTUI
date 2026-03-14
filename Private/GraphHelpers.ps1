@@ -3,9 +3,13 @@ function Connect-InTUIGraph {
     .SYNOPSIS
         Connects to Microsoft Graph with required scopes for Intune management.
     .PARAMETER Scopes
-        Graph API permission scopes to request.
+        Graph API permission scopes to request (interactive auth only).
     .PARAMETER TenantId
         Optional tenant ID or domain.
+    .PARAMETER ClientId
+        Application (client) ID for service principal auth.
+    .PARAMETER ClientSecret
+        Client secret for service principal auth.
     .PARAMETER Environment
         Cloud environment: Global, USGov, USGovDoD, or China.
     #>
@@ -19,11 +23,18 @@ function Connect-InTUIGraph {
             'Group.Read.All',
             'GroupMember.Read.All',
             'DeviceManagementConfiguration.Read.All',
-            'Directory.Read.All'
+            'Directory.Read.All',
+            'AuditLog.Read.All'
         ),
 
         [Parameter()]
         [string]$TenantId,
+
+        [Parameter()]
+        [string]$ClientId,
+
+        [Parameter()]
+        [string]$ClientSecret,
 
         [Parameter()]
         [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
@@ -35,43 +46,49 @@ function Connect-InTUIGraph {
     $script:GraphBaseUrl = $envConfig.GraphBaseUrl
     $script:GraphBetaUrl = $envConfig.GraphBetaUrl
 
+    $useClientCredential = $ClientId -and $ClientSecret -and $TenantId
+
     Write-InTUILog -Message "Connecting to Microsoft Graph" -Context @{
-        Environment = $Environment
+        Environment  = $Environment
         GraphBaseUrl = $script:GraphBaseUrl
-        TenantId = $TenantId
-    }
-
-    $params = @{
-        Scopes = $Scopes
-        NoWelcome = $true
-        Environment = $envConfig.MgEnvironment
-    }
-
-    if ($TenantId) {
-        $params['TenantId'] = $TenantId
+        TenantId     = $TenantId
+        AuthMode     = if ($useClientCredential) { 'ClientCredential' } else { 'Interactive' }
     }
 
     try {
-        Connect-MgGraph @params
-        $context = Get-MgContext
-        if ($context) {
-            $script:Connected = $true
-            $script:TenantId = $context.TenantId
-            $script:Account = $context.Account
-            Write-InTUILog -Message "Connected to Microsoft Graph" -Context @{
-                TenantId = $context.TenantId
-                Account = $context.Account
-                Environment = $Environment
-            }
-            return $true
+        if ($useClientCredential) {
+            $secureSecret = ConvertTo-SecureString -String $ClientSecret -AsPlainText -Force
+            $credential = [System.Management.Automation.PSCredential]::new($ClientId, $secureSecret)
+            Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $credential -NoWelcome -Environment $envConfig.MgEnvironment
         }
+        else {
+            $params = @{
+                Scopes      = $Scopes
+                NoWelcome   = $true
+                Environment = $envConfig.MgEnvironment
+            }
+            if ($TenantId) { $params['TenantId'] = $TenantId }
+            Connect-MgGraph @params
+        }
+
+        $context = Get-MgContext
+        if (-not $context) { return $false }
+
+        $script:Connected = $true
+        $script:TenantId = $context.TenantId
+        $script:Account = $context.Account ?? $ClientId
+        Write-InTUILog -Message "Connected to Microsoft Graph" -Context @{
+            TenantId    = $context.TenantId
+            Account     = $script:Account
+            Environment = $Environment
+        }
+        return $true
     }
     catch {
         Write-InTUILog -Level 'ERROR' -Message "Failed to connect to Microsoft Graph: $($_.Exception.Message)"
-        Write-SpectreHost "[red]Failed to connect to Microsoft Graph: $($_.Exception.Message)[/]"
+        Write-InTUIText "[red]Failed to connect to Microsoft Graph: $($_.Exception.Message)[/]"
         return $false
     }
-    return $false
 }
 
 function Invoke-InTUIGraphRequest {
@@ -106,7 +123,7 @@ function Invoke-InTUIGraphRequest {
 
     if (-not $script:Connected) {
         Write-InTUILog -Level 'WARN' -Message "Graph request attempted while not connected" -Context @{ Uri = $Uri }
-        Write-SpectreHost "[red]Not connected to Microsoft Graph. Run Connect-InTUI first.[/]"
+        Write-InTUIText "[red]Not connected to Microsoft Graph. Run Connect-InTUI first.[/]"
         return $null
     }
 
@@ -197,7 +214,8 @@ function Invoke-InTUIGraphRequest {
             Set-InTUICachedResponse -Uri $fullUri -Data $response -Method $Method -Beta:$Beta
         }
 
-        return $response
+        # Return $true for no-content success (e.g., 204) so $null exclusively means error
+        return ($response ?? $true)
     }
     catch {
         $errorMessage = $_.Exception.Message
@@ -218,7 +236,7 @@ function Invoke-InTUIGraphRequest {
             }
         }
         Write-InTUILog -Level 'ERROR' -Message "Graph API Error: $errorMessage" -Context @{ Uri = $fullUri; Method = $Method }
-        Write-SpectreHost "[red]Graph API Error: $errorMessage[/]"
+        Write-InTUIText "[red]Graph API Error: $errorMessage[/]"
         return $null
     }
 }
@@ -296,16 +314,24 @@ function Get-InTUIPagedResults {
 
     $response = Invoke-InTUIGraphRequest @params
 
-    $results = if ($response.value) { $response.value }
-               elseif ($response -is [array]) { $response }
-               else { @($response) }
+    # Guard: null or non-object response (e.g. $true from 204 No Content)
+    if ($null -eq $response -or $response -is [bool]) {
+        return @{ Results = @(); NextLink = $null; TotalCount = 0 }
+    }
 
-    $totalCount = $response.'@odata.count' ?? @($results).Count
+    $results = if ($response.value) { @($response.value) }
+               elseif ($response -is [array]) { $response }
+               else { @() }
+
+    $resultCount = @($results).Count
+    $odataCount = $response.'@odata.count'
+    # Use @odata.count only when present and sensible (>= page results); otherwise use actual count
+    $totalCount = if ($null -ne $odataCount -and $odataCount -ge $resultCount) { $odataCount } else { $resultCount }
 
     return @{
-        Results  = $results
-        NextLink = $response.'@odata.nextLink'
-        Count    = $totalCount
+        Results    = $results
+        NextLink   = $response.'@odata.nextLink'
+        TotalCount = $totalCount
     }
 }
 
@@ -355,7 +381,7 @@ function Format-InTUIDate {
 function Get-InTUIComplianceColor {
     <#
     .SYNOPSIS
-        Returns Spectre markup color based on compliance state.
+        Returns markup color name based on compliance state.
     #>
     param([string]$State)
 
@@ -373,7 +399,7 @@ function Get-InTUIComplianceColor {
 function Get-InTUIInstallStateColor {
     <#
     .SYNOPSIS
-        Returns Spectre markup color based on app install state.
+        Returns markup color name based on app install state.
     #>
     param([string]$State)
 
@@ -395,13 +421,13 @@ function Get-InTUIDeviceIcon {
     param([string]$OperatingSystem)
 
     switch -Wildcard ($OperatingSystem) {
-        '*Windows*' { return "[blue]$([char]0x25A0)[/]" }      # Filled square
-        '*iOS*'     { return "[grey]$([char]0x25CF)[/]" }      # Filled circle
-        '*iPadOS*'  { return "[grey]$([char]0x25A3)[/]" }      # Square with dot
-        '*macOS*'   { return "[grey]$([char]0x25C6)[/]" }      # Filled diamond
-        '*Android*' { return "[green]$([char]0x25B2)[/]" }     # Filled triangle
-        '*Linux*'   { return "[yellow]$([char]0x25C7)[/]" }    # Hollow diamond
-        default     { return "[grey]$([char]0x25CB)[/]" }      # Hollow circle
+        '*Windows*' { return '[blue]W[/]' }
+        '*iOS*'     { return '[grey]i[/]' }
+        '*iPadOS*'  { return '[grey]P[/]' }
+        '*macOS*'   { return '[grey]m[/]' }
+        '*Android*' { return '[green]A[/]' }
+        '*Linux*'   { return '[yellow]L[/]' }
+        default     { return '[grey]-[/]' }
     }
 }
 
@@ -413,16 +439,16 @@ function Get-InTUIAppTypeIcon {
     param([string]$AppType)
 
     switch -Wildcard ($AppType) {
-        '*win32*'           { return "[blue]$([char]0x2B1B)[/]" }
-        '*msi*'             { return "[blue]$([char]0x229E)[/]" }
-        '*ios*'             { return "[grey]$([char]0x25C9)[/]" }
-        '*android*'         { return "[green]$([char]0x25B2)[/]" }
-        '*webApp*'          { return "[cyan]$([char]0x2B58)[/]" }
-        '*office*'          { return "[orange1]$([char]0x25A3)[/]" }
-        '*microsoft*'       { return "[blue]$([char]0x25A0)[/]" }
-        '*store*'           { return "[cyan]$([char]0x25A6)[/]" }
-        '*managed*'         { return "[yellow]$([char]0x25A8)[/]" }
-        default             { return "[grey]$([char]0x25A1)[/]" }
+        '*win32*'           { return '[blue]W[/]' }
+        '*msi*'             { return '[blue]M[/]' }
+        '*ios*'             { return '[grey]i[/]' }
+        '*android*'         { return '[green]A[/]' }
+        '*webApp*'          { return '[cyan]w[/]' }
+        '*office*'          { return '[orange1]O[/]' }
+        '*microsoft*'       { return '[blue]M[/]' }
+        '*store*'           { return '[cyan]S[/]' }
+        '*managed*'         { return '[yellow]m[/]' }
+        default             { return '[grey]-[/]' }
     }
 }
 
@@ -434,12 +460,12 @@ function Get-InTUIPolicyIcon {
     param([string]$PolicyType)
 
     switch -Wildcard ($PolicyType) {
-        '*compliance*'      { return "[green]$([char]0x2713)[/]" }    # Check mark
-        '*configuration*'   { return "[blue]$([char]0x2699)[/]" }     # Gear
-        '*conditional*'     { return "[yellow]$([char]0x26A0)[/]" }   # Warning
-        '*security*'        { return "[red]$([char]0x26E8)[/]" }      # Shield
-        '*update*'          { return "[cyan]$([char]0x21BB)[/]" }     # Circular arrow
-        default             { return "[grey]$([char]0x25A1)[/]" }     # Square
+        '*compliance*'      { return '[green]+[/]' }
+        '*configuration*'   { return '[blue]*[/]' }
+        '*conditional*'     { return '[yellow]![/]' }
+        '*security*'        { return '[red]#[/]' }
+        '*update*'          { return '[cyan]~[/]' }
+        default             { return '[grey]-[/]' }
     }
 }
 
@@ -455,13 +481,13 @@ function Get-InTUISecurityIcon {
     )
 
     switch ($Type) {
-        'Shield'  { return "[blue]$([char]0x26E8)[/]" }
-        'Lock'    { return "[green]$([char]0x25A3)[/]" }
-        'Unlock'  { return "[yellow]$([char]0x25A2)[/]" }
-        'Key'     { return "[yellow]$([char]0x2318)[/]" }
-        'Warning' { return "[yellow]$([char]0x26A0)[/]" }
-        'Error'   { return "[red]$([char]0x2717)[/]" }
-        'Check'   { return "[green]$([char]0x2713)[/]" }
-        'Cross'   { return "[red]$([char]0x2717)[/]" }
+        'Shield'  { return '[blue]#[/]' }
+        'Lock'    { return '[green]#[/]' }
+        'Unlock'  { return '[yellow]-[/]' }
+        'Key'     { return '[yellow]k[/]' }
+        'Warning' { return '[yellow]![/]' }
+        'Error'   { return '[red]x[/]' }
+        'Check'   { return '[green]+[/]' }
+        'Cross'   { return '[red]x[/]' }
     }
 }

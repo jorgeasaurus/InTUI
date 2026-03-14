@@ -271,8 +271,8 @@ function Show-InTUIRecordingMenu {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Script Recording')
 
-    Write-SpectreHost $statusText
-    Write-SpectreHost ""
+    Write-InTUIText $statusText
+    Write-InTUIText ""
 
     $choices = if ($status.IsRecording) {
         @(

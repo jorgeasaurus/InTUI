@@ -49,7 +49,6 @@ BeforeAll {
     $script:GraphBetaUrl = $script:CloudEnvironments['Global'].GraphBetaUrl
 
     # Stub out external dependencies that aren't available in test
-    function Write-SpectreHost { param([string]$Message) }
     function Invoke-MgGraphRequest {
         param($Uri, $Method, $OutputType, $Body, $ContentType)
         return @{ value = @() }
@@ -58,6 +57,10 @@ BeforeAll {
     function Get-MgContext { return $null }
 
     # Dot-source the files under test
+    . "$ProjectRoot/Private/AnsiPalette.ps1"
+    . "$ProjectRoot/Private/AnsiGradient.ps1"
+    . "$ProjectRoot/Private/AnsiWidth.ps1"
+    . "$ProjectRoot/Private/AnsiCapability.ps1"
     . "$ProjectRoot/Private/Logging.ps1"
     . "$ProjectRoot/Private/GraphHelpers.ps1"
 
@@ -958,7 +961,7 @@ Describe 'Get-InTUIPagedResults Query Building' {
         $result.Results.Count | Should -Be 2
     }
 
-    It 'Should include Count key in result' {
+    It 'Should include TotalCount key in result' {
         Mock Invoke-MgGraphRequest -MockWith {
             return @{
                 value = @(@{ id = '1' })
@@ -967,8 +970,8 @@ Describe 'Get-InTUIPagedResults Query Building' {
         }
 
         $result = Get-InTUIPagedResults -Uri '/users'
-        $result.ContainsKey('Count') | Should -BeTrue
-        $result.Count | Should -Be 42
+        $result.ContainsKey('TotalCount') | Should -BeTrue
+        $result.TotalCount | Should -Be 42
     }
 
     It 'Should build URI with search parameter' {
