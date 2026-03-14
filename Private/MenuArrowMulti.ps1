@@ -50,6 +50,10 @@ function Show-InTUIMenuArrowMulti {
 
     # Viewport sizing
     $chromeRows = 5
+
+    # Ensure buffer has room for items + chrome before computing viewport
+    $anchorTop = Ensure-InTUIBufferSpace -AnchorTop $anchorTop -NeededRows ([math]::Min($itemCount, $PageSize) + $chromeRows)
+
     $maxVisible = [Math]::Max(3, [Console]::WindowHeight - $anchorTop - $chromeRows)
     $viewportSize = if ($itemCount -gt $maxVisible) { $maxVisible } else { 0 }
     $viewportOffset = 0

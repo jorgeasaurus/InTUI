@@ -1,3 +1,37 @@
+function Ensure-InTUIBufferSpace {
+    <#
+    .SYNOPSIS
+        Scrolls the terminal buffer to ensure enough rows below the anchor for rendering.
+    .DESCRIPTION
+        When UI components render near the bottom of the terminal, SetCursorPosition
+        calls past the buffer height silently fail or scroll content away. This function
+        pre-scrolls the buffer to guarantee enough room, returning the adjusted anchor.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [int]$AnchorTop,
+
+        [Parameter(Mandatory)]
+        [int]$NeededRows
+    )
+
+    $bufferHeight = [Console]::BufferHeight
+    $available = $bufferHeight - $AnchorTop
+
+    if ($available -ge $NeededRows) { return $AnchorTop }
+
+    # Scroll just enough, but keep the box title visible (3 rows above anchor)
+    $scrollAmount = [math]::Min($NeededRows - $available, [math]::Max(0, $AnchorTop - 3))
+    if ($scrollAmount -le 0) { return $AnchorTop }
+
+    [Console]::SetCursorPosition(0, $bufferHeight - 1)
+    for ($s = 0; $s -lt $scrollAmount; $s++) {
+        [Console]::Write("`n")
+    }
+    return ($AnchorTop - $scrollAmount)
+}
+
 function Show-InTUIHeader {
     <#
     .SYNOPSIS
