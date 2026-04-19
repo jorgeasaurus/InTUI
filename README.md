@@ -2,9 +2,13 @@
 
 A PowerShell terminal UI for managing Microsoft Intune resources via Microsoft Graph API. Uses a custom ANSI TUI engine with Catppuccin Mocha colors, Unicode box-drawing, gradient decorations, and flicker-free cursor-positioned redraws. Mimics the Intune admin center experience directly in your terminal.
 
+[![CI/CD](https://github.com/jorgeasaurus/InTUI/actions/workflows/ci.yml/badge.svg)](https://github.com/jorgeasaurus/InTUI/actions/workflows/ci.yml)
+[![PSGallery Version](https://img.shields.io/powershellgallery/v/InTUI?label=PSGallery)](https://www.powershellgallery.com/packages/InTUI)
+[![PSGallery Downloads](https://img.shields.io/powershellgallery/dt/InTUI?label=Downloads)](https://www.powershellgallery.com/packages/InTUI)
 ![PowerShell](https://img.shields.io/badge/PowerShell-7.2+-blue)
 ![Graph API](https://img.shields.io/badge/Microsoft%20Graph-v1.0%20%7C%20beta-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+[![License](https://img.shields.io/github/license/jorgeasaurus/InTUI)](LICENSE)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
 <p align="center">
   <img src="Media/Intui.png" alt="InTUI Screenshot" width="700">
