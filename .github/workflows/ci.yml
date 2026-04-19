@@ -39,7 +39,9 @@ jobs:
 
       - name: Bootstrap Build Environment
         shell: pwsh
-        run: ./build.ps1
+        run: |
+          ./build.ps1
+          Install-Module -Name Microsoft.Graph.Authentication -Force -Scope CurrentUser -AllowClobber
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -96,6 +98,10 @@ jobs:
         with:
           name: module-build
           path: build/InTUI/
+
+      - name: Install Graph Module
+        shell: pwsh
+        run: Install-Module -Name Microsoft.Graph.Authentication -Force -Scope CurrentUser -AllowClobber
 
       - name: Verify Build Artifacts
         shell: pwsh
