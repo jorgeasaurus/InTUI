@@ -20,13 +20,13 @@ function Read-InTUITextInput {
     $defaultHint = if ($DefaultAnswer) { " $($palette.Dim)($DefaultAnswer)$reset" } else { '' }
 
     Write-Host "$ansiMessage$defaultHint`: " -NoNewline
-    $input = Read-Host
+    $userInput = Read-Host
 
-    if ([string]::IsNullOrWhiteSpace($input) -and $DefaultAnswer) {
+    if ([string]::IsNullOrWhiteSpace($userInput) -and $DefaultAnswer) {
         return $DefaultAnswer
     }
 
-    return $input
+    return $userInput
 }
 
 function Read-InTUIConfirmInput {
@@ -50,11 +50,11 @@ function Read-InTUIConfirmInput {
     $hint = if ($DefaultAnswer) { '[Y/n]' } else { '[y/N]' }
 
     Write-Host "$ansiMessage $($palette.Dim)$hint$reset " -NoNewline
-    $input = Read-Host
+    $userInput = Read-Host
 
-    if ([string]::IsNullOrWhiteSpace($input)) {
+    if ([string]::IsNullOrWhiteSpace($userInput)) {
         return $DefaultAnswer
     }
 
-    return ($input.Trim().ToLower() -eq 'y')
+    return ($userInput.Trim().ToLower() -eq 'y')
 }

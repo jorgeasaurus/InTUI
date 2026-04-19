@@ -1,4 +1,4 @@
-function Show-InTUIEnrollmentView {
+﻿function Show-InTUIEnrollmentView {
     <#
     .SYNOPSIS
         Displays the Enrollment management view mimicking the Intune Enrollment blade.
@@ -221,10 +221,10 @@ function Show-InTUIAutopilotProfileList {
         }
 
         $profileChoices = @()
-        foreach ($profile in $profiles.Results) {
-            $modified = Format-InTUIDate -DateString $profile.lastModifiedDateTime
+        foreach ($enrollmentProfile in $profiles.Results) {
+            $modified = Format-InTUIDate -DateString $enrollmentProfile.lastModifiedDateTime
 
-            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $profile.displayName)[/] [grey]| $modified[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $enrollmentProfile.displayName)[/] [grey]| $modified[/]"
             $profileChoices += $displayName
         }
 
@@ -274,24 +274,24 @@ function Show-InTUIAutopilotProfileDetail {
             }
         }
 
-        $profile = $detailData.Profile
+        $enrollmentProfile = $detailData.Profile
         $assignments = $detailData.Assignments
 
-        if ($null -eq $profile) {
+        if ($null -eq $enrollmentProfile) {
             Show-InTUIError "Failed to load Autopilot profile details."
             Read-InTUIKey
             return
         }
 
-        Show-InTUIBreadcrumb -Path @('Home', 'Enrollment', 'Autopilot Deployment Profiles', $profile.displayName)
+        Show-InTUIBreadcrumb -Path @('Home', 'Enrollment', 'Autopilot Deployment Profiles', $enrollmentProfile.displayName)
 
         $propsContent = @"
-[bold white]$(ConvertTo-InTUISafeMarkup -Text $profile.displayName)[/]
+[bold white]$(ConvertTo-InTUISafeMarkup -Text $enrollmentProfile.displayName)[/]
 
-[grey]Description:[/]               $(if ($profile.description) { $profile.description.Substring(0, [Math]::Min(200, $profile.description.Length)) } else { 'N/A' })
+[grey]Description:[/]               $(if ($enrollmentProfile.description) { $enrollmentProfile.description.Substring(0, [Math]::Min(200, $enrollmentProfile.description.Length)) } else { 'N/A' })
 "@
 
-        $oobe = $profile.outOfBoxExperienceSettings
+        $oobe = $enrollmentProfile.outOfBoxExperienceSettings
         if ($null -ne $oobe) {
             $propsContent += @"
 
@@ -299,15 +299,15 @@ function Show-InTUIAutopilotProfileDetail {
 [grey]Hide EULA:[/]                  $($oobe.hideEULA ?? 'N/A')
 [grey]User Type:[/]                  $($oobe.userType ?? 'N/A')
 [grey]Hide Escape Link:[/]           $($oobe.hideEscapeLink ?? 'N/A')
-[grey]Language:[/]                    $($profile.language ?? 'N/A')
-[grey]Device Name Template:[/]       $($profile.deviceNameTemplate ?? 'N/A')
+[grey]Language:[/]                    $($enrollmentProfile.language ?? 'N/A')
+[grey]Device Name Template:[/]       $($enrollmentProfile.deviceNameTemplate ?? 'N/A')
 "@
         }
 
         $propsContent += @"
 
-[grey]Created:[/]                    $(Format-InTUIDate -DateString $profile.createdDateTime)
-[grey]Last Modified:[/]              $(Format-InTUIDate -DateString $profile.lastModifiedDateTime)
+[grey]Created:[/]                    $(Format-InTUIDate -DateString $enrollmentProfile.createdDateTime)
+[grey]Last Modified:[/]              $(Format-InTUIDate -DateString $enrollmentProfile.lastModifiedDateTime)
 "@
 
         Show-InTUIPanel -Title "[steelblue1_1]Profile Properties[/]" -Content $propsContent -BorderColor SteelBlue1_1
@@ -332,7 +332,7 @@ function Show-InTUIAutopilotProfileDetail {
 
         Show-InTUIPanel -Title "[steelblue1_1]Assignments[/]" -Content $assignContent -BorderColor SteelBlue1_1
 
-        Write-InTUILog -Message "Viewing Autopilot profile detail" -Context @{ ProfileId = $ProfileId; ProfileName = $profile.displayName }
+        Write-InTUILog -Message "Viewing Autopilot profile detail" -Context @{ ProfileId = $ProfileId; ProfileName = $enrollmentProfile.displayName }
 
         $actionChoices = @(
             '─────────────',
@@ -561,6 +561,7 @@ function Show-InTUIApplePushCertificate {
         }
         catch {
             # Use default display if parsing fails
+            $null = $_
         }
     }
 
@@ -725,6 +726,7 @@ function Show-InTUIAppleDEPTokenDetail {
             }
             catch {
                 # Use default display
+                $null = $_
             }
         }
 

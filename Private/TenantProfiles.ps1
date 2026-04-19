@@ -1,4 +1,4 @@
-$script:TenantProfilePath = Join-Path $HOME '.intui_tenants.json'
+﻿$script:TenantProfilePath = Join-Path $HOME '.intui_tenants.json'
 
 function Get-InTUITenantProfiles {
     <#
@@ -118,10 +118,10 @@ function Show-InTUITenantSwitcher {
     }
 
     $choices = @()
-    foreach ($profile in $profiles) {
-        $current = if ($profile.TenantId -eq $script:TenantId -and $profile.Environment -eq $script:CloudEnvironment) { ' [green](current)[/]' } else { '' }
-        $envLabel = if ($script:CloudEnvironments[$profile.Environment]) { $script:CloudEnvironments[$profile.Environment].Label } else { $profile.Environment }
-        $choices += "$($profile.Label) [grey]| $envLabel | $($profile.Account) | Last: $($profile.LastUsed)[/]$current"
+    foreach ($tenantProfile in $profiles) {
+        $current = if ($tenantProfile.TenantId -eq $script:TenantId -and $tenantProfile.Environment -eq $script:CloudEnvironment) { ' [green](current)[/]' } else { '' }
+        $envLabel = if ($script:CloudEnvironments[$tenantProfile.Environment]) { $script:CloudEnvironments[$tenantProfile.Environment].Label } else { $tenantProfile.Environment }
+        $choices += "$($tenantProfile.Label) [grey]| $envLabel | $($tenantProfile.Account) | Last: $($tenantProfile.LastUsed)[/]$current"
     }
 
     $choiceMap = Get-InTUIChoiceMap -Choices $choices

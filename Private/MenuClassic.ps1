@@ -33,12 +33,12 @@ function Show-InTUIMenuClassic {
 
     if ($MultiSelect) {
         Write-Host "$($palette.Dim)Enter numbers separated by commas (e.g., 1,3,5), or 'a' for all:$reset" -NoNewline
-        $input = Read-Host
-        if ($input -eq 'a') {
+        $userInput = Read-Host
+        if ($userInput -eq 'a') {
             return @(0..($Choices.Count - 1))
         }
         $indices = @()
-        foreach ($part in ($input -split ',')) {
+        foreach ($part in ($userInput -split ',')) {
             $trimmed = $part.Trim()
             $num = 0
             if ([int]::TryParse($trimmed, [ref]$num) -and $num -ge 1 -and $num -le $Choices.Count) {
@@ -49,9 +49,9 @@ function Show-InTUIMenuClassic {
     }
     else {
         Write-Host "$($palette.Dim)Enter number (or 0 to go back):$reset " -NoNewline
-        $input = Read-Host
+        $userInput = Read-Host
         $num = 0
-        if ([int]::TryParse($input, [ref]$num)) {
+        if ([int]::TryParse($userInput, [ref]$num)) {
             if ($num -eq 0) { return 'Back' }
             if ($num -ge 1 -and $num -le $Choices.Count) { return ($num - 1) }
         }

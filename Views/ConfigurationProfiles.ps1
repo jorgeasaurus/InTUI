@@ -1,4 +1,4 @@
-function Get-InTUIConfigPolicyPlatform {
+﻿function Get-InTUIConfigPolicyPlatform {
     <#
     .SYNOPSIS
         Maps a configurationPolicies platforms value to a friendly label.
@@ -184,11 +184,11 @@ function Show-InTUIConfigProfileList {
         }
 
         $profileChoices = @()
-        foreach ($profile in $filteredResults) {
-            $modified = Format-InTUIDate -DateString $profile.Modified
-            $sourceTag = if ($profile.Source -eq 'Catalog') { '[cyan]SC[/]' } else { '[grey]DC[/]' }
+        foreach ($configProfile in $filteredResults) {
+            $modified = Format-InTUIDate -DateString $configProfile.Modified
+            $sourceTag = if ($configProfile.Source -eq 'Catalog') { '[cyan]SC[/]' } else { '[grey]DC[/]' }
 
-            $displayName = "$sourceTag [white]$($profile.Name)[/] [grey]| $($profile.Platform) | $($profile.Type) | $modified[/]"
+            $displayName = "$sourceTag [white]$($configProfile.Name)[/] [grey]| $($configProfile.Platform) | $($configProfile.Type) | $modified[/]"
             $profileChoices += $displayName
         }
 
@@ -246,35 +246,35 @@ function Show-InTUICatalogProfileDetail {
             }
         }
 
-        $profile = $detailData.Profile
+        $configProfile = $detailData.Profile
         $assignments = $detailData.Assignments
 
-        if ($null -eq $profile) {
+        if ($null -eq $configProfile) {
             Show-InTUIError "Failed to load profile details."
             Read-InTUIKey
             return
         }
 
-        Show-InTUIBreadcrumb -Path @('Home', 'Configuration Profiles', $profile.name)
+        Show-InTUIBreadcrumb -Path @('Home', 'Configuration Profiles', $configProfile.name)
 
-        Add-InTUIHistoryEntry -ViewType 'CatalogProfile' -ViewId $ProfileId -DisplayName $profile.name
+        Add-InTUIHistoryEntry -ViewType 'CatalogProfile' -ViewId $ProfileId -DisplayName $configProfile.name
 
-        $platform = Get-InTUIConfigPolicyPlatform -Platforms $profile.platforms
-        $tech = Get-InTUIConfigPolicyTechnology -Technologies $profile.technologies
-        $templateName = $profile.templateReference.templateDisplayName
+        $platform = Get-InTUIConfigPolicyPlatform -Platforms $configProfile.platforms
+        $tech = Get-InTUIConfigPolicyTechnology -Technologies $configProfile.technologies
+        $templateName = $configProfile.templateReference.templateDisplayName
 
         $propsContent = @"
-[bold white]$($profile.name)[/]
+[bold white]$($configProfile.name)[/]
 
 [grey]Source:[/]            [cyan]Settings Catalog[/]
 [grey]Platform:[/]          $platform
 [grey]Technology:[/]        $tech
-[grey]Description:[/]       $(if ($profile.description) { $profile.description.Substring(0, [Math]::Min(200, $profile.description.Length)) } else { 'N/A' })
+[grey]Description:[/]       $(if ($configProfile.description) { $configProfile.description.Substring(0, [Math]::Min(200, $configProfile.description.Length)) } else { 'N/A' })
 [grey]Template:[/]          $(if ($templateName) { $templateName } else { 'None' })
-[grey]Settings Count:[/]    $($profile.settingCount ?? 0)
-[grey]Is Assigned:[/]       $($profile.isAssigned ?? $false)
-[grey]Created:[/]           $(Format-InTUIDate -DateString $profile.createdDateTime)
-[grey]Last Modified:[/]     $(Format-InTUIDate -DateString $profile.lastModifiedDateTime)
+[grey]Settings Count:[/]    $($configProfile.settingCount ?? 0)
+[grey]Is Assigned:[/]       $($configProfile.isAssigned ?? $false)
+[grey]Created:[/]           $(Format-InTUIDate -DateString $configProfile.createdDateTime)
+[grey]Last Modified:[/]     $(Format-InTUIDate -DateString $configProfile.lastModifiedDateTime)
 "@
 
         Show-InTUIPanel -Title "[cyan]Profile Properties[/]" -Content $propsContent -BorderColor Cyan1
@@ -306,11 +306,11 @@ function Show-InTUICatalogProfileDetail {
 
         $action = Show-InTUIMenu -Title "[cyan]Profile Actions[/]" -Choices $actionChoices
 
-        Write-InTUILog -Message "Config profile detail action" -Context @{ ProfileId = $ProfileId; ProfileName = $profile.name; Action = $action }
+        Write-InTUILog -Message "Config profile detail action" -Context @{ ProfileId = $ProfileId; ProfileName = $configProfile.name; Action = $action }
 
         switch ($action) {
             'View Settings' {
-                Show-InTUICatalogProfileSettings -ProfileId $ProfileId -ProfileName $profile.name
+                Show-InTUICatalogProfileSettings -ProfileId $ProfileId -ProfileName $configProfile.name
             }
             'Back to Profiles' {
                 $exitDetail = $true
@@ -419,32 +419,32 @@ function Show-InTUILegacyProfileDetail {
             }
         }
 
-        $profile = $detailData.Profile
+        $configProfile = $detailData.Profile
         $assignments = $detailData.Assignments
         $statuses = $detailData.Statuses
 
-        if ($null -eq $profile) {
+        if ($null -eq $configProfile) {
             Show-InTUIError "Failed to load profile details."
             Read-InTUIKey
             return
         }
 
-        Show-InTUIBreadcrumb -Path @('Home', 'Configuration Profiles', $profile.displayName)
+        Show-InTUIBreadcrumb -Path @('Home', 'Configuration Profiles', $configProfile.displayName)
 
-        Add-InTUIHistoryEntry -ViewType 'ConfigProfile' -ViewId $ProfileId -DisplayName $profile.displayName
+        Add-InTUIHistoryEntry -ViewType 'ConfigProfile' -ViewId $ProfileId -DisplayName $configProfile.displayName
 
-        $typeInfo = Get-InTUIConfigProfileType -ODataType $profile.'@odata.type'
+        $typeInfo = Get-InTUIConfigProfileType -ODataType $configProfile.'@odata.type'
 
         $propsContent = @"
-[bold white]$($profile.displayName)[/]
+[bold white]$($configProfile.displayName)[/]
 
 [grey]Source:[/]            [grey]Device Configuration[/]
 [grey]Type:[/]              $($typeInfo.FriendlyName)
 [grey]Platform:[/]          $($typeInfo.Platform)
-[grey]Description:[/]       $(if ($profile.description) { $profile.description.Substring(0, [Math]::Min(200, $profile.description.Length)) } else { 'N/A' })
-[grey]Created:[/]           $(Format-InTUIDate -DateString $profile.createdDateTime)
-[grey]Last Modified:[/]     $(Format-InTUIDate -DateString $profile.lastModifiedDateTime)
-[grey]Version:[/]           $($profile.version ?? 'N/A')
+[grey]Description:[/]       $(if ($configProfile.description) { $configProfile.description.Substring(0, [Math]::Min(200, $configProfile.description.Length)) } else { 'N/A' })
+[grey]Created:[/]           $(Format-InTUIDate -DateString $configProfile.createdDateTime)
+[grey]Last Modified:[/]     $(Format-InTUIDate -DateString $configProfile.lastModifiedDateTime)
+[grey]Version:[/]           $($configProfile.version ?? 'N/A')
 "@
 
         Show-InTUIPanel -Title "[cyan]Profile Properties[/]" -Content $propsContent -BorderColor Cyan1
@@ -495,21 +495,21 @@ function Show-InTUILegacyProfileDetail {
 
         $actionChoices = @(
             'View Device Statuses',
-            'View Conflicts'
+            'View Conflicts',
             '─────────────',
             'Back to Profiles'
         )
 
         $action = Show-InTUIMenu -Title "[cyan]Profile Actions[/]" -Choices $actionChoices
 
-        Write-InTUILog -Message "Config profile detail action" -Context @{ ProfileId = $ProfileId; ProfileName = $profile.displayName; Action = $action }
+        Write-InTUILog -Message "Config profile detail action" -Context @{ ProfileId = $ProfileId; ProfileName = $configProfile.displayName; Action = $action }
 
         switch ($action) {
             'View Device Statuses' {
-                Show-InTUILegacyProfileDeviceStatuses -ProfileId $ProfileId -ProfileName $profile.displayName
+                Show-InTUILegacyProfileDeviceStatuses -ProfileId $ProfileId -ProfileName $configProfile.displayName
             }
             'View Conflicts' {
-                Show-InTUIProfileConflicts -ProfileId $ProfileId -ProfileName $profile.displayName
+                Show-InTUIProfileConflicts -ProfileId $ProfileId -ProfileName $configProfile.displayName
             }
             'Back to Profiles' {
                 $exitDetail = $true
