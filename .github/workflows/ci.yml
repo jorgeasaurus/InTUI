@@ -45,6 +45,18 @@ jobs:
         shell: pwsh
         run: ./build.ps1 -Task Analyze
 
+      - name: Install tmux (TUI tests)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if ! command -v tmux &>/dev/null; then
+            if [ "$RUNNER_OS" = "Linux" ]; then
+              sudo apt-get update && sudo apt-get install -y tmux
+            elif [ "$RUNNER_OS" = "macOS" ]; then
+              brew install tmux
+            fi
+          fi
+
       - name: Run Pester Tests
         shell: pwsh
         run: ./build.ps1 -Task Test

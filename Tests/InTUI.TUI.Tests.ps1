@@ -19,7 +19,7 @@ BeforeAll {
     $script:DriverDir = Join-Path $PSScriptRoot 'drivers'
 }
 
-Describe 'TUI Test Prerequisites' {
+Describe 'TUI Test Prerequisites' -Skip:(-not $script:TmuxAvailable) {
     It 'tmux is installed' {
         $tmux = Get-Command tmux -ErrorAction SilentlyContinue
         $tmux | Should -Not -BeNullOrEmpty
