@@ -7,7 +7,7 @@ A PowerShell terminal UI for managing Microsoft Intune resources via Microsoft G
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 <p align="center">
-  <img src="media/Intui.png" alt="InTUI Screenshot" width="700">
+  <img src="Media/Intui.png" alt="InTUI Screenshot" width="700">
 </p>
 
 
