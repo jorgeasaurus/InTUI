@@ -1,4 +1,4 @@
-# InTUI Script Recording
+﻿# InTUI Script Recording
 # Records Graph API actions for playback/automation
 
 function Start-InTUIRecording {

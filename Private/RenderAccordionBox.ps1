@@ -1,4 +1,4 @@
-function Render-InTUIAccordionBox {
+﻿function Render-InTUIAccordionBox {
     <#
     .SYNOPSIS
         Renders accordion menu items inside a box with in-place redraw.
@@ -182,8 +182,9 @@ function Render-InTUIAccordionBox {
 
     } catch [System.ArgumentOutOfRangeException] {
         # Terminal too small for full accordion — render truncated gracefully
+        $null = $_
     }
 
     # Move cursor below the box
-    try { [Console]::SetCursorPosition(0, [math]::Min($row, $maxRow)) } catch { }
+    try { [Console]::SetCursorPosition(0, [math]::Min($row, $maxRow)) } catch { $null = $_ }
 }

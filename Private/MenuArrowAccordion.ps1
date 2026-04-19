@@ -106,7 +106,7 @@ function Show-InTUIMenuArrowAccordion {
     $anchorTop = Ensure-InTUIBufferSpace -AnchorTop $anchorTop -NeededRows ($Sections.Count + $maxChildren + 6)
 
     try {
-        try { [Console]::CursorVisible = $false } catch { }
+        try { [Console]::CursorVisible = $false } catch { $null = $_ }
 
         # Initial render
         Render-InTUIAccordionBox -Rows $rows -SelectedIndex $selectedIndex -AnchorTop $anchorTop -PreviousRowCount $previousRowCount
@@ -231,6 +231,6 @@ function Show-InTUIMenuArrowAccordion {
         }
     }
     finally {
-        try { [Console]::CursorVisible = $true } catch { }
+        try { [Console]::CursorVisible = $true } catch { $null = $_ }
     }
 }

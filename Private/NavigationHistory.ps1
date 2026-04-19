@@ -1,4 +1,4 @@
-# InTUI Navigation History
+﻿# InTUI Navigation History
 # Tracks recently visited detail views for quick re-navigation
 
 $script:NavigationHistory = @()

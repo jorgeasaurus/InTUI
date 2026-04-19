@@ -1,4 +1,4 @@
-function Show-InTUIAppsView {
+﻿function Show-InTUIAppsView {
     <#
     .SYNOPSIS
         Displays the Apps management view mimicking the Intune Apps blade.

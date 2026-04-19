@@ -1,4 +1,4 @@
-function Show-InTUIReportsView {
+﻿function Show-InTUIReportsView {
     <#
     .SYNOPSIS
         Displays the Reports view with stale devices, app install failures, and license utilization.

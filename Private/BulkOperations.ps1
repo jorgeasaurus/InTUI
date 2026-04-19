@@ -102,20 +102,18 @@ function Invoke-InTUIBulkDeviceAction {
         'Sync Devices' {
             $confirm = Show-InTUIConfirm -Message "[yellow]Sync $($selectedDevices.Count) device(s)?[/]"
             if ($confirm) {
-                $successCount = 0
                 $failedDevices = [System.Collections.Generic.List[string]]::new()
-                
+
                 Show-InTUILoading -Title "[blue]Syncing $($selectedDevices.Count) devices...[/]" -ScriptBlock {
                     foreach ($device in $selectedDevices) {
                         $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/syncDevice" -Method POST -Beta
-                        if ($null -ne $result) {
-                            $successCount++
-                        } else {
+                        if ($null -eq $result) {
                             $failedDevices.Add($device.deviceName)
                         }
                     }
                 }
-                
+
+                $successCount = $selectedDevices.Count - $failedDevices.Count
                 if ($failedDevices.Count -eq 0) {
                     Show-InTUISuccess "Sync initiated for $successCount device(s)."
                 } else {
@@ -127,20 +125,18 @@ function Invoke-InTUIBulkDeviceAction {
         'Restart Devices' {
             $confirm = Show-InTUIConfirm -Message "[yellow]Restart $($selectedDevices.Count) device(s)?[/]"
             if ($confirm) {
-                $successCount = 0
                 $failedDevices = [System.Collections.Generic.List[string]]::new()
-                
+
                 Show-InTUILoading -Title "[blue]Restarting $($selectedDevices.Count) devices...[/]" -ScriptBlock {
                     foreach ($device in $selectedDevices) {
                         $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/rebootNow" -Method POST -Beta
-                        if ($null -ne $result) {
-                            $successCount++
-                        } else {
+                        if ($null -eq $result) {
                             $failedDevices.Add($device.deviceName)
                         }
                     }
                 }
-                
+
+                $successCount = $selectedDevices.Count - $failedDevices.Count
                 if ($failedDevices.Count -eq 0) {
                     Show-InTUISuccess "Restart initiated for $successCount device(s)."
                 } else {
@@ -154,20 +150,18 @@ function Invoke-InTUIBulkDeviceAction {
             if ($confirm) {
                 $confirm2 = Show-InTUIConfirm -Message "[red]Final confirmation: Retire $($selectedDevices.Count) device(s)?[/]"
                 if ($confirm2) {
-                    $successCount = 0
                     $failedDevices = [System.Collections.Generic.List[string]]::new()
-                    
+
                     Show-InTUILoading -Title "[red]Retiring $($selectedDevices.Count) devices...[/]" -ScriptBlock {
                         foreach ($device in $selectedDevices) {
                             $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$($device.id)/retire" -Method POST -Beta
-                            if ($null -ne $result) {
-                                $successCount++
-                            } else {
+                            if ($null -eq $result) {
                                 $failedDevices.Add($device.deviceName)
                             }
                         }
                     }
-                    
+
+                    $successCount = $selectedDevices.Count - $failedDevices.Count
                     if ($failedDevices.Count -eq 0) {
                         Show-InTUISuccess "Retire initiated for $successCount device(s)."
                     } else {

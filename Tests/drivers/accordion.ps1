@@ -9,6 +9,7 @@ $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . "$root/Private/AnsiWidth.ps1"
 . "$root/Private/AnsiCapability.ps1"
 . "$root/Private/RenderMenuBox.ps1"
+. "$root/Private/UIHelpers.ps1"
 . "$root/Private/RenderAccordionBox.ps1"
 . "$root/Private/MenuArrowAccordion.ps1"
 

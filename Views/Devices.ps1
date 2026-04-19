@@ -1,4 +1,4 @@
-function Show-InTUIDevicesView {
+﻿function Show-InTUIDevicesView {
     <#
     .SYNOPSIS
         Displays the Devices management view mimicking the Intune Devices blade.
@@ -298,6 +298,9 @@ $icon [bold]$($device.deviceName)[/]
                     if ($null -ne $result) {
                         Show-InTUISuccess "Device renamed to '$newName'. Change will apply on next sync."
                     }
+                    else {
+                        Show-InTUIError "Failed to rename device."
+                    }
                     Read-InTUIKey
                 }
             }
@@ -495,8 +498,6 @@ function Show-InTUIComplianceOverview {
     $compBar = Get-InTUIProgressBar -Percentage $compPercent -Width 30
 
     $osSum = $complianceData.deviceOperatingSystemSummary
-    $totalOS = ([int]($osSum.windowsCount ?? 0)) + ([int]($osSum.iosCount ?? 0)) + ([int]($osSum.macOSCount ?? 0)) +
-               ([int]($osSum.androidCount ?? 0)) + ([int]($osSum.linuxCount ?? 0))
 
     $content = @"
 [bold white]Device Compliance Overview[/]

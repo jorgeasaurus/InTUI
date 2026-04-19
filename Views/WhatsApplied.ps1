@@ -1,4 +1,4 @@
-function Show-InTUIWhatsAppliedView {
+﻿function Show-InTUIWhatsAppliedView {
     <#
     .SYNOPSIS
         Unified view showing all policies, profiles, and apps applied to a device or user.

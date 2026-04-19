@@ -91,11 +91,18 @@ function Start-InTUI {
             }
         }
         else {
-            $params = @{ Environment = $Environment }
-            if ($TenantId) { $params['TenantId'] = $TenantId }
-            if ($ClientId) { $params['ClientId'] = $ClientId }
-            if ($ClientSecret) { $params['ClientSecret'] = $ClientSecret }
-            $connected = Connect-InTUI @params
+            $hasDirectParams = $TenantId -or $ClientId -or $ClientSecret
+            if ($hasDirectParams) {
+                $params = @{ Environment = $Environment }
+                if ($TenantId) { $params['TenantId'] = $TenantId }
+                if ($ClientId) { $params['ClientId'] = $ClientId }
+                if ($ClientSecret) { $params['ClientSecret'] = $ClientSecret }
+                $connected = Connect-InTUI @params
+            }
+            else {
+                $connected = Connect-InTUI -Interactive
+            }
+
             if (-not $connected) {
                 Write-InTUILog -Level 'ERROR' -Message "Failed to connect, exiting"
                 return
@@ -126,7 +133,7 @@ function Start-InTUI {
             }
             @{
                 Title = 'Tools'
-                Items = @('Global Search', 'Bookmarks', 'Recent History', "What's Applied?", 'Assignment Conflicts', 'Policy Diff', 'Command Palette', 'Live Dashboard', 'Script Recording', 'Settings')
+                Items = @('Global Search', 'Bookmarks', 'Recent History', "What's Applied?", 'Assignment Conflicts', 'Command Palette', 'Live Dashboard', 'Script Recording', 'Settings')
             }
             @{
                 Title = 'Session'
@@ -222,10 +229,6 @@ function Start-InTUI {
             'Assignment Conflicts' {
                 Write-InTUILog -Message "Opening Assignment Conflicts"
                 Show-InTUIAssignmentConflictView
-            }
-            'Policy Diff' {
-                Write-InTUILog -Message "Opening Policy Diff"
-                Show-InTUIPolicyDiffView
             }
             'Command Palette' {
                 Write-InTUILog -Message "Opening Command Palette"

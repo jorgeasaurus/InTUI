@@ -8,6 +8,7 @@ $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . "$root/Private/AnsiWidth.ps1"
 . "$root/Private/AnsiCapability.ps1"
 . "$root/Private/RenderMenuBox.ps1"
+. "$root/Private/UIHelpers.ps1"
 . "$root/Private/MenuArrowSingle.ps1"
 
 # Generate 30 items to force viewport scrolling in a 40-row terminal

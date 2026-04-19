@@ -1,4 +1,4 @@
-function Show-InTUIUsersView {
+﻿function Show-InTUIUsersView {
     <#
     .SYNOPSIS
         Displays the Users management view mimicking the Intune Users blade.

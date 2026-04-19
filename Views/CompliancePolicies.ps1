@@ -1,4 +1,4 @@
-function Show-InTUICompliancePoliciesView {
+﻿function Show-InTUICompliancePoliciesView {
     <#
     .SYNOPSIS
         Displays the Compliance Policies view with platform filtering and search.

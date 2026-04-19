@@ -1,4 +1,4 @@
-function Show-InTUIScriptsView {
+﻿function Show-InTUIScriptsView {
     <#
     .SYNOPSIS
         Displays the Scripts & Remediations view with navigation to device scripts and proactive remediations.
@@ -182,7 +182,7 @@ function Show-InTUIDeviceScriptDetail {
         # Run state summary panel
         $runStateList = if ($runStates.value) { @($runStates.value) } else { @() }
         $succeeded = @($runStateList | Where-Object { $_.resultMessage -eq '' -or $_.errorCode -eq 0 }).Count
-        $failed = @($runStateList | Where-Object { $_.errorCode -ne 0 -and $_.errorCode -ne $null }).Count
+        $failed = @($runStateList | Where-Object { $_.errorCode -ne 0 -and $null -ne $_.errorCode }).Count
         $pending = $runStateList.Count - $succeeded - $failed
 
         $runSummaryContent = @"

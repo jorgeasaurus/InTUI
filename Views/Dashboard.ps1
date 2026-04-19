@@ -88,9 +88,10 @@ function Show-InTUIDashboard {
     Show-InTUIPanel -Title "[cyan]Groups[/]" -Content $groupContent -BorderColor Cyan
 
     # Quick stats footer
+    $statsWidth = Get-InTUIConsoleInnerWidth
     Write-InTUIText ""
-    Write-InTUIText "[grey]$(([string][char]0x2500) * 60)[/]"
-    Write-InTUIText "[grey]Quick Stats:[/] [blue]>[/] [white]$($dashData.DeviceCount)[/] devices  [green]>[/] [white]$($dashData.AppCount)[/] apps  [yellow]>[/] [white]$($dashData.UserCount)[/] users  [cyan]>[/] [white]$($dashData.GroupCount)[/] groups"
+    Write-InTUIText "  [grey]$(([string][char]0x2500) * $statsWidth)[/]"
+    Write-InTUIText "  [grey]Quick Stats:[/] [blue]>[/] [white]$($dashData.DeviceCount)[/] devices  [green]>[/] [white]$($dashData.AppCount)[/] apps  [yellow]>[/] [white]$($dashData.UserCount)[/] users  [cyan]>[/] [white]$($dashData.GroupCount)[/] groups"
     Write-InTUIText ""
 }
 

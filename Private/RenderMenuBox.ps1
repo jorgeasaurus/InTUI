@@ -1,4 +1,4 @@
-function Render-InTUIMenuBox {
+﻿function Render-InTUIMenuBox {
     <#
     .SYNOPSIS
         Renders menu items inside a rounded-corner box with in-place redraw.

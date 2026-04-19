@@ -41,8 +41,10 @@ function Render-InTUIPanel {
     $horizontal  = [char]0x2500
     $vertical    = [char]0x2502
 
-    $boxWidth = $innerWidth
+    # Match accordion box layout: 2-space indent + border + innerWidth + border = WindowWidth
+    $boxWidth = $innerWidth + 2
     $contentWidth = $boxWidth - 4  # 2 border + 2 padding
+    $indent = '  '
 
     # Top border with optional title
     if ($Title) {
@@ -52,10 +54,10 @@ function Render-InTUIPanel {
         $lineLen = $boxWidth - 4 - $titleDisplayWidth
         $leftLine = [Math]::Max(1, [int]([Math]::Floor($lineLen / 2)))
         $rightLine = [Math]::Max(1, $lineLen - $leftLine)
-        Write-Host "$borderAnsi$topLeft$([string]::new($horizontal, $leftLine))$reset $ansiTitle $borderAnsi$([string]::new($horizontal, $rightLine))$topRight$reset"
+        Write-Host "$indent$borderAnsi$topLeft$([string]::new($horizontal, $leftLine))$reset $ansiTitle $borderAnsi$([string]::new($horizontal, $rightLine))$topRight$reset"
     }
     else {
-        Write-Host "$borderAnsi$topLeft$([string]::new($horizontal, ($boxWidth - 2)))$topRight$reset"
+        Write-Host "$indent$borderAnsi$topLeft$([string]::new($horizontal, ($boxWidth - 2)))$topRight$reset"
     }
 
     # Content lines
@@ -82,9 +84,9 @@ function Render-InTUIPanel {
             $displayWidth = $cutWidth + 3
         }
         $padRight = [Math]::Max(0, $contentWidth - $displayWidth)
-        Write-Host "$borderAnsi$vertical$reset $ansiLine$reset$(' ' * $padRight) $borderAnsi$vertical$reset"
+        Write-Host "$indent$borderAnsi$vertical$reset $ansiLine$reset$(' ' * $padRight) $borderAnsi$vertical$reset"
     }
 
     # Bottom border
-    Write-Host "$borderAnsi$bottomLeft$([string]::new($horizontal, ($boxWidth - 2)))$bottomRight$reset"
+    Write-Host "$indent$borderAnsi$bottomLeft$([string]::new($horizontal, ($boxWidth - 2)))$bottomRight$reset"
 }

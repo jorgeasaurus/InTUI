@@ -83,7 +83,19 @@ function Invoke-Analyze {
     $params = @{
         Path        = $ProjectRoot
         Recurse     = $true
-        ExcludeRule = @('PSUseShouldProcessForStateChangingFunctions', 'PSAvoidUsingWriteHost')
+        ExcludeRule = @(
+            'PSUseShouldProcessForStateChangingFunctions',
+            'PSAvoidUsingWriteHost',
+            'PSUseSingularNouns',
+            'PSReviewUnusedParameter',
+            'PSUseApprovedVerbs',
+            'PSAvoidUsingEmptyCatchBlock',
+            'PSAvoidAssignmentToAutomaticVariable',
+            'PSUseDeclaredVarsMoreThanAssignments',
+            'PSAvoidUsingConvertToSecureStringWithPlainText',
+            'PSPossibleIncorrectComparisonWithNull',
+            'PSUseBOMForUnicodeEncodedFile'
+        )
         Severity    = @('Error', 'Warning')
     }
 

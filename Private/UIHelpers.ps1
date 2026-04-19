@@ -1,4 +1,4 @@
-function Ensure-InTUIBufferSpace {
+﻿function Ensure-InTUIBufferSpace {
     <#
     .SYNOPSIS
         Scrolls the terminal buffer to ensure enough rows below the anchor for rendering.
@@ -45,9 +45,18 @@ function Show-InTUIHeader {
     $palette = Get-InTUIColorPalette
     $reset = $palette.Reset
 
+    $consoleWidth = try { [Console]::WindowWidth } catch { 80 }
+
+    # Helper to center a plain string and return the left padding count
+    $centerPad = {
+        param([int]$TextWidth)
+        [Math]::Max(0, [int](($consoleWidth - $TextWidth) / 2))
+    }
+
     # Gradient-decorated top border
-    $gradientTop = Get-InTUIGradientLine -Character ([char]0x2500) -Width 40
-    Write-Host $gradientTop
+    $borderWidth = [Math]::Min(60, $consoleWidth - 4)
+    $gradientTop = Get-InTUIGradientLine -Character ([char]0x2500) -Width $borderWidth
+    Write-Host "$(' ' * (& $centerPad $borderWidth))$gradientTop"
 
     # ASCII art banner with gradient
     $bannerLines = @(
@@ -58,32 +67,56 @@ function Show-InTUIHeader {
         '██║██║ ╚████║   ██║   ╚██████╔╝██║'
         '╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝'
     )
+    $bannerWidth = Measure-InTUIDisplayWidth -Text $bannerLines[0]
+    $bannerPad = & $centerPad $bannerWidth
     foreach ($line in $bannerLines) {
         $gradientLine = Get-InTUIGradientString -Text $line
-        Write-Host $gradientLine
+        Write-Host "$(' ' * $bannerPad)$gradientLine"
     }
 
-    Write-Host "$($palette.Dim)Intune Terminal User Interface$reset"
+    $tagline = 'Intune Terminal User Interface'
+    $taglinePad = & $centerPad $tagline.Length
+    Write-Host "$(' ' * $taglinePad)$($palette.Dim)$tagline$reset"
     Write-Host ""
 
     if ($script:Connected) {
-        $tenant = if ($script:TenantId) { $script:TenantId } else { 'Unknown' }
+        $tenant = if ($script:TenantId) {
+            $tid = $script:TenantId
+            if ($tid -match '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') {
+                $tParts = $tid -split '-'
+                '{0}-****-****-****-********{1}' -f $tParts[0], $tParts[4].Substring(8)
+            }
+            else {
+                $tid
+            }
+        } else { 'Unknown' }
         $account = if ($script:Account) { $script:Account } else { 'Unknown' }
         $envLabel = if ($script:CloudEnvironments -and $script:CloudEnvironment) {
             $script:CloudEnvironments[$script:CloudEnvironment].Label
         } else { 'Global' }
-        Write-InTUIText "[grey]Env:[/] [cyan]$envLabel[/]"
-        Write-InTUIText "[grey]Tenant:[/] [cyan]$tenant[/]"
-        Write-InTUIText "[grey]Account:[/] [cyan]$account[/]"
+
+        $infoLines = @(
+            @{ Label = 'Env'; Value = $envLabel }
+            @{ Label = 'Tenant'; Value = $tenant }
+            @{ Label = 'Account'; Value = $account }
+        )
+        $maxLabel = ($infoLines | ForEach-Object { $_.Label.Length } | Measure-Object -Maximum).Maximum
+        foreach ($info in $infoLines) {
+            $plainLine = "$($info.Label.PadLeft($maxLabel)):  $($info.Value)"
+            $infoPad = & $centerPad $plainLine.Length
+            Write-InTUIText "$(' ' * $infoPad)[grey]$($info.Label.PadLeft($maxLabel)):[/]  [cyan]$($info.Value)[/]"
+        }
     }
 
     if ($Subtitle) {
-        Write-InTUIText "[grey]$Subtitle[/]"
+        $plainSub = Strip-InTUIMarkup -Text $Subtitle
+        $subPad = & $centerPad $plainSub.Length
+        Write-InTUIText "$(' ' * $subPad)[grey]$Subtitle[/]"
     }
 
     # Gradient bottom border
-    $gradientBottom = Get-InTUIGradientLine -Character ([char]0x2500) -Width 60
-    Write-Host $gradientBottom
+    $gradientBottom = Get-InTUIGradientLine -Character ([char]0x2500) -Width $borderWidth
+    Write-Host "$(' ' * (& $centerPad $borderWidth))$gradientBottom"
     Write-Host ""
 }
 

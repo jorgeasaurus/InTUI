@@ -1,4 +1,4 @@
-function Show-InTUIConditionalAccessView {
+﻿function Show-InTUIConditionalAccessView {
     <#
     .SYNOPSIS
         Displays the Conditional Access view with policies, named locations, and sign-in logs.

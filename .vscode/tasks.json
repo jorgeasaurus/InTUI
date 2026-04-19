@@ -74,10 +74,10 @@
             "problemMatcher": []
         },
         {
-            "label": "Module: Launch InTUI (SkipConnect)",
+            "label": "Module: Launch InTUI",
             "type": "shell",
             "command": "pwsh",
-            "args": ["-NoProfile", "-Command", "Import-Module \"${workspaceFolder}/InTUI.psd1\" -Force; Start-InTUI -SkipConnect"],
+            "args": ["-NoProfile", "-Command", "Import-Module \"${workspaceFolder}/InTUI.psd1\" -Force; Start-InTUI"],
             "group": "none",
             "presentation": { "reveal": "always", "panel": "shared", "focus": true },
             "problemMatcher": []

@@ -1,4 +1,4 @@
-$script:ConfigPath = Join-Path $HOME '.intui_config.json'
+﻿$script:ConfigPath = Join-Path $HOME '.intui_config.json'
 
 $script:InTUIConfig = @{
     PageSize        = 50

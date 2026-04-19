@@ -1,4 +1,4 @@
-# InTUI Global Search
+﻿# InTUI Global Search
 # Cross-entity incremental search
 
 function Invoke-InTUIGlobalSearch {

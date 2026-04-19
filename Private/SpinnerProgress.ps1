@@ -63,8 +63,6 @@ function Invoke-InTUIWithSpinner {
         [scriptblock]$ScriptBlock
     )
 
-    $palette = Get-InTUIColorPalette
-
     # Start background job approach won't work for script-scope vars.
     # Use a simple spinner with polling.
     $sw = [System.Diagnostics.Stopwatch]::StartNew()

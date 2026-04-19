@@ -1,4 +1,4 @@
-function Show-InTUIAppProtectionView {
+﻿function Show-InTUIAppProtectionView {
     <#
     .SYNOPSIS
         Displays the App Protection management view for MAM policies, VPP tokens, and Win32 dependencies.
@@ -309,7 +309,7 @@ function Show-InTUIVppTokenList {
                         $expiresColor = 'red'
                     }
                 }
-                catch { }
+                catch { $null = $_ }
             }
 
             $orgName = $token.organizationName ?? 'Unknown'
@@ -386,7 +386,7 @@ function Show-InTUIVppTokenDetail {
                     $expirationWarning = "`n[red]WARNING: Token has expired![/]"
                 }
             }
-            catch { }
+            catch { $null = $_ }
         }
 
         $propsContent = @"

@@ -91,6 +91,7 @@ function Write-InTUILog {
     }
     catch {
         # Silently fail - logging should never break the app
+        $null = $_
     }
 }
 

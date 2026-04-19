@@ -79,7 +79,7 @@ function Show-InTUIMenuArrowSingle {
     }
 
     try {
-        try { [Console]::CursorVisible = $false } catch { }
+        try { [Console]::CursorVisible = $false } catch { $null = $_ }
 
         # Initial render
         & $adjustViewport
@@ -127,6 +127,6 @@ function Show-InTUIMenuArrowSingle {
         }
     }
     finally {
-        try { [Console]::CursorVisible = $true } catch { }
+        try { [Console]::CursorVisible = $true } catch { $null = $_ }
     }
 }

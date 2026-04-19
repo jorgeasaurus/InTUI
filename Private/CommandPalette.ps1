@@ -24,7 +24,6 @@ function Show-InTUICommandPalette {
         @{ Name = 'Settings';                Category = 'tool';     Action = 'Settings' }
         @{ Name = "What's Applied?";         Category = 'tool';     Action = 'WhatsApplied' }
         @{ Name = 'Assignment Conflicts';    Category = 'tool';     Action = 'AssignmentConflicts' }
-        @{ Name = 'Policy Diff';             Category = 'tool';     Action = 'PolicyDiff' }
         @{ Name = 'Recent History';          Category = 'tool';     Action = 'RecentHistory' }
         @{ Name = 'Help';                    Category = 'tool';     Action = 'Help' }
     )
@@ -191,7 +190,6 @@ function Invoke-InTUICommandPaletteAction {
         'Settings'             { Show-InTUISettings }
         'WhatsApplied'         { Show-InTUIWhatsAppliedView }
         'AssignmentConflicts'  { Show-InTUIAssignmentConflictView }
-        'PolicyDiff'           { Show-InTUIPolicyDiffView }
         'RecentHistory'        { Show-InTUIRecentHistory }
         'Help'                 { Show-InTUIHelp }
         'HistoryEntry' {

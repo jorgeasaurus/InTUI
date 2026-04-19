@@ -1,4 +1,4 @@
-function Get-InTUIGroupType {
+﻿function Get-InTUIGroupType {
     <#
     .SYNOPSIS
         Determines the friendly group type name with icon.
@@ -244,7 +244,7 @@ function Show-InTUIGroupDetail {
         Show-InTUIPanel -Title "[cyan]Group Properties[/]" -Content $propsContent -BorderColor Cyan1
 
         $memberCountData = Show-InTUILoading -Title "[cyan]Loading member count...[/]" -ScriptBlock {
-            Invoke-InTUIGraphRequest -Uri "/groups/$GroupId/members?`$top=1&`$select=id"
+            Invoke-InTUIGraphRequest -Uri "/groups/$GroupId/members?`$top=1&`$select=id&`$count=true" -Headers @{ 'ConsistencyLevel' = 'eventual' }
         }
 
         if ($null -ne $memberCountData) {

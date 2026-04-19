@@ -1,4 +1,4 @@
-# InTUI Bookmarks
+﻿# InTUI Bookmarks
 # Provides bookmarkable view management
 
 $script:BookmarkIcons = @{

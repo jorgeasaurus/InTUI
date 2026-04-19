@@ -38,7 +38,10 @@ function Connect-InTUIGraph {
 
         [Parameter()]
         [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
-        [string]$Environment = 'Global'
+        [string]$Environment = 'Global',
+
+        [Parameter()]
+        [switch]$UseDeviceCode
     )
 
     $script:CloudEnvironment = $Environment
@@ -48,11 +51,15 @@ function Connect-InTUIGraph {
 
     $useClientCredential = $ClientId -and $ClientSecret -and $TenantId
 
+    $authMode = if ($useClientCredential) { 'ClientCredential' }
+                elseif ($UseDeviceCode) { 'DeviceCode' }
+                else { 'Interactive' }
+
     Write-InTUILog -Message "Connecting to Microsoft Graph" -Context @{
         Environment  = $Environment
         GraphBaseUrl = $script:GraphBaseUrl
         TenantId     = $TenantId
-        AuthMode     = if ($useClientCredential) { 'ClientCredential' } else { 'Interactive' }
+        AuthMode     = $authMode
     }
 
     try {
@@ -60,6 +67,16 @@ function Connect-InTUIGraph {
             $secureSecret = ConvertTo-SecureString -String $ClientSecret -AsPlainText -Force
             $credential = [System.Management.Automation.PSCredential]::new($ClientId, $secureSecret)
             Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $credential -NoWelcome -Environment $envConfig.MgEnvironment
+        }
+        elseif ($UseDeviceCode) {
+            $params = @{
+                Scopes        = $Scopes
+                UseDeviceCode = $true
+                NoWelcome     = $true
+                Environment   = $envConfig.MgEnvironment
+            }
+            if ($TenantId) { $params['TenantId'] = $TenantId }
+            Connect-MgGraph @params
         }
         else {
             $params = @{

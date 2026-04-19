@@ -1,4 +1,4 @@
-# Catppuccin theme definitions (RGB triplets)
+﻿# Catppuccin theme definitions (RGB triplets)
 # Reference: https://catppuccin.com/palette
 $script:CatppuccinThemes = @{
     Mocha = @{
@@ -263,7 +263,7 @@ function Strip-InTUIMarkup {
     $result = $Text -replace '\[\[', "`0LBRACKET`0"
     $result = $result -replace '\]\]', "`0RBRACKET`0"
 
-    # Remove [tag]...[/] keeping inner content — innermost first, loop until stable
+    # Remove [tag]...[/] keeping inner content - innermost first, loop until stable
     do {
         $prev = $result
         $result = [regex]::Replace($result, '\[([^\]\/]+)\]([^\[]*?)\[/\]', '$2')

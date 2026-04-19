@@ -6,6 +6,11 @@ A PowerShell terminal UI for managing Microsoft Intune resources via Microsoft G
 ![Graph API](https://img.shields.io/badge/Microsoft%20Graph-v1.0%20%7C%20beta-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
+<p align="center">
+  <img src="media/Intui.png" alt="InTUI Screenshot" width="700">
+</p>
+
+
 ## Features
 
 - **Devices** - Browse all managed devices, filter by OS (Windows, iOS, macOS, Android), view compliance overview, device details with hardware info, Defender threat status panel, execute remote actions (sync, restart, rename, retire, wipe), and bulk operations
@@ -20,16 +25,22 @@ A PowerShell terminal UI for managing Microsoft Intune resources via Microsoft G
 - **Security** - Browse security baselines, endpoint protection policies, lookup BitLocker recovery keys, and Defender overview dashboard
 - **Conditional Access** - Browse CA policies (read-only), view named locations, and filter sign-in logs
 - **Reports** - Stale device reports, app install failure summaries, license utilization, compliance trend charts, and enrollment trend charts
+- **What's Applied** - Unified view of all policies, profiles, and apps targeting a specific device or user
 - **Multi-Tenant** - Save tenant profiles for quick switching and tenant health summary on connect
 - **Dashboard** - Summary panels with device, app, user, and group counts plus compliance statistics, with live auto-refresh mode
+- **Connection Wizard** - Interactive TUI-driven connection flow with cloud environment selection, auth method choice (browser, device code, service principal), and saved tenant profiles
 
 ### Tools
 
 - **Global Search** - Search across devices, apps, users, and groups simultaneously
+- **Command Palette** - Quick navigation to any view via fuzzy search
 - **Keyboard Shortcuts** - Vim-style navigation with shortcut bar and help overlay
 - **Bookmarks** - Save and recall frequent navigation paths
+- **Navigation History** - Recently visited views for quick re-navigation
 - **Script Recording** - Record Graph API actions and export as replayable PowerShell scripts
 - **Caching** - Local response caching with configurable TTL for faster navigation
+- **Assignment Conflicts** - Detect groups targeted by multiple policies with conflicting settings
+- **Error Code Lookup** - Maps common Intune error codes to descriptions and remediation steps
 
 ### Navigation
 
@@ -47,30 +58,42 @@ A PowerShell terminal UI for managing Microsoft Intune resources via Microsoft G
 ## Installation
 
 ```powershell
-# Clone the repo
+# From PSGallery
+Install-Module -Name InTUI -Scope CurrentUser
+```
+
+Or install from source:
+
+```powershell
 git clone https://github.com/jorgeasaurus/InTUI.git
 cd InTUI
-
-# Install dependencies
 ./Start-InTUI.ps1 -Install
 ```
 
 ## Usage
 
 ```powershell
-# Launch directly
+# Launch (opens interactive connection wizard)
 ./Start-InTUI.ps1
 
 # Connect to a specific tenant
 ./Start-InTUI.ps1 -TenantId "contoso.onmicrosoft.com"
 
-# Or import as a module and use the alias
+# Service principal auth
+./Start-InTUI.ps1 -TenantId $tid -ClientId $cid -ClientSecret $sec
+
+# GCC High environment
+./Start-InTUI.ps1 -TenantId $tid -Environment USGov
+
+# Or import as a module
 Import-Module ./InTUI.psd1
 intui
 
-# Full function names also work
-Connect-InTUI
-Start-InTUI
+# Device code flow (headless/remote terminals)
+Connect-InTUI -UseDeviceCode
+
+# Interactive connection wizard
+Connect-InTUI -Interactive
 ```
 
 ## Project Structure
@@ -85,6 +108,7 @@ InTUI/
 │   ├── AnsiGradient.ps1      # Per-character RGB gradient interpolation
 │   ├── AnsiWidth.ps1         # Console width detection
 │   ├── AnsiCapability.ps1    # Arrow key and true color detection
+│   ├── RenderAccordionBox.ps1# Accordion section box renderer
 │   ├── RenderMenuBox.ps1     # Unicode-bordered menu box renderer
 │   ├── RenderPanel.ps1       # Content panel with gradient borders
 │   ├── RenderTable.ps1       # Auto-width column table renderer
@@ -97,6 +121,7 @@ InTUI/
 │   ├── SpinnerProgress.ps1   # Rotating spinner with elapsed time
 │   ├── UIHelpers.ps1         # High-level UI abstraction layer
 │   ├── GraphHelpers.ps1      # Graph API connection, pagination, requests
+│   ├── ConnectionWizard.ps1  # Interactive connection flow with env/auth selection
 │   ├── Logging.ps1           # Logging system
 │   ├── Configuration.ps1     # Configuration management
 │   ├── TenantProfiles.ps1    # Multi-tenant profile switching
@@ -105,7 +130,11 @@ InTUI/
 │   ├── ScriptRecording.ps1   # Record and export Graph API actions
 │   ├── KeyboardShortcuts.ps1 # Shortcut bar and help overlay
 │   ├── Bookmarks.ps1         # Bookmark management
-│   └── GlobalSearch.ps1      # Cross-entity search
+│   ├── GlobalSearch.ps1      # Cross-entity search
+│   ├── CommandPalette.ps1    # Fuzzy search navigation to any view
+│   ├── NavigationHistory.ps1 # Recently visited view tracking
+│   ├── AssignmentConflicts.ps1# Multi-policy conflict detection
+│   └── ErrorCodeLookup.ps1   # Intune error code descriptions and remediation
 ├── Public/
 │   ├── Connect-InTUI.ps1     # Connect-InTUI function
 │   ├── Start-InTUI.ps1       # Start-InTUI entry point
@@ -123,7 +152,8 @@ InTUI/
     ├── Enrollment.ps1             # Autopilot, ESP, and DEP/ABM tokens
     ├── Security.ps1               # Security baselines and Defender
     ├── ConditionalAccess.ps1      # CA policies, locations, sign-in logs
-    └── Reports.ps1                # Reports and trend charts
+    ├── Reports.ps1                # Reports and trend charts
+    └── WhatsApplied.ps1           # Unified policy/app view per device or user
 ```
 
 ## Graph API Design
@@ -146,6 +176,7 @@ No other Microsoft.Graph sub-modules are required. This keeps the dependency foo
 | `Group.Read.All` | Group directory access |
 | `GroupMember.Read.All` | Group membership enumeration |
 | `Directory.Read.All` | License and directory details |
+| `AuditLog.Read.All` | Sign-in logs and audit events |
 
 ## Device Actions
 
@@ -159,77 +190,4 @@ No other Microsoft.Graph sub-modules are required. This keeps the dependency foo
 
 ## Roadmap
 
-### Configuration Profiles & Compliance Policies
-
-- [x] Browse and view device configuration profiles
-- [x] View per-setting compliance status across devices
-- [x] Compliance policy list with assignment details
-- [x] Configuration profile conflict detection and display
-
-### App Management Enhancements
-
-- [x] Create and edit app assignments directly from TUI
-- [x] Win32 app dependency and supersedence visualization
-- [x] App protection policy (MAM) browsing and status
-- [x] VPP token status and license tracking for iOS/macOS
-
-### Bulk Operations
-
-- [x] Multi-select devices for bulk sync, restart, or retire
-- [x] Bulk assign apps to groups
-- [x] Export device/user/app lists to CSV from any view
-
-### Scripts & Remediations
-
-- [x] Browse and view PowerShell script assignments
-- [x] Proactive remediation script status per device
-- [x] Script execution history and output viewer
-
-### Enrollment
-
-- [x] Autopilot device list and profile assignments
-- [x] Enrollment status page (ESP) configuration viewer
-- [x] Apple DEP/ABM token status and device sync
-
-### Security & Endpoint Protection
-
-- [x] Microsoft Defender for Endpoint threat status per device
-- [x] Security baseline assignment and compliance view
-- [x] BitLocker recovery key lookup
-- [x] Firewall and antivirus policy status
-
-### Conditional Access
-
-- [x] Browse Conditional Access policies (read-only)
-- [x] Named locations viewer
-- [x] Sign-in log viewer with filtering
-
-### Reporting & Dashboards
-
-- [x] Compliance trend charts with ANSI bar charts
-- [x] Device enrollment trend by platform
-- [x] Stale device report (no check-in for X days)
-- [x] App install failure summary with error codes
-- [x] License utilization overview
-
-### Multi-Tenant Support
-
-- [x] Saved tenant profiles with quick switching
-- [x] Tenant health summary on connect
-
-### UX Improvements
-
-- [x] Keyboard shortcut bar (vim-style navigation)
-- [x] Bookmarkable views (save frequent navigation paths)
-- [x] Local caching layer for faster repeated lookups
-- [x] Configurable cache settings via Settings menu
-- [x] Live auto-refresh mode for monitoring dashboards
-- [x] Global search across all entity types
-- [ ] Command palette (Ctrl+P style) for quick navigation
-
-### Automation & Integration
-
-- [x] Record actions as replayable PowerShell scripts
 - [ ] Webhook listener for real-time compliance change alerts
-- [x] Pipe-friendly output mode for scripting (`Export-InTUIData`)
-- [x] JSON/CSV export of device and policy configurations for diff/version control

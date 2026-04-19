@@ -1,4 +1,4 @@
-function Show-InTUISecurityView {
+﻿function Show-InTUISecurityView {
     <#
     .SYNOPSIS
         Displays the Security view with security baselines, endpoint protection, and BitLocker keys.

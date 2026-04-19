@@ -1,4 +1,4 @@
-function Show-InTUIAssignmentConflictView {
+﻿function Show-InTUIAssignmentConflictView {
     <#
     .SYNOPSIS
         Detects groups targeted by multiple configuration or compliance policies (potential conflicts).
