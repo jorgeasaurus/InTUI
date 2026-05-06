@@ -114,39 +114,78 @@ function Show-InTUIDeviceWhatsApplied {
     Write-InTUILog -Message "Loading What's Applied for device" -Context @{ DeviceId = $DeviceId; DeviceName = $DeviceName }
 
     $data = Show-InTUILoading -Title "[blue]Loading applied policies and apps...[/]" -ScriptBlock {
-        $configStates = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId/deviceConfigurationStates" -Beta
+        # Configuration policies (legacy + settings catalog + ADMX + intents) via report endpoint
+        $reportBody = @{
+            top     = 50
+            skip    = 0
+            select  = @(
+                'IntuneDeviceId'
+                'PolicyBaseTypeName'
+                'PolicyId'
+                'PolicyStatus'
+                'UPN'
+                'UserId'
+                'PspdpuLastModifiedTimeUtc'
+                'PolicyName'
+                'UnifiedPolicyType'
+            )
+            orderBy = @('PolicyName')
+            search  = ''
+            filter  = "((PolicyBaseTypeName eq 'Microsoft.Management.Services.Api.DeviceConfiguration') or (PolicyBaseTypeName eq 'DeviceManagementConfigurationPolicy') or (PolicyBaseTypeName eq 'DeviceConfigurationAdmxPolicy') or (PolicyBaseTypeName eq 'Microsoft.Management.Services.Api.DeviceManagementIntent')) and (IntuneDeviceId eq '$DeviceId')"
+        }
+        $modernPolicies = Invoke-InTUIGraphRequest -Uri "/deviceManagement/reports/getConfigurationPoliciesReportForDevice" -Method POST -Body $reportBody -Beta
+
         $complianceStates = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId/deviceCompliancePolicyStates" -Beta
         $deviceInfo = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/${DeviceId}?`$select=userId" -Beta
 
         $appIntents = $null
         if ($deviceInfo.userId) {
-            $appIntents = Invoke-InTUIGraphRequest -Uri "/users/$($deviceInfo.userId)/mobileAppIntentAndStates" -Beta
+            $appIntents = Invoke-InTUIGraphRequest -Uri "/users('$($deviceInfo.userId)')/mobileAppIntentAndStates('$DeviceId')" -Beta
         }
 
         @{
-            ConfigStates    = $configStates
+            ModernPolicies  = $modernPolicies
             ComplianceStates = $complianceStates
             AppIntents      = $appIntents
         }
     }
 
-    # Configuration Profiles
-    $configItems = if ($data.ConfigStates.value) { @($data.ConfigStates.value) } else { @() }
-    if ($configItems.Count -gt 0) {
-        $configRows = @()
-        foreach ($state in $configItems) {
-            $stateColor = switch ($state.state) {
-                'compliant'    { 'green' }
-                'notApplicable' { 'grey' }
-                default        { 'yellow' }
+    # Configuration Profiles via device report endpoint
+    $rows = @()
+
+    if ($data.ModernPolicies) {
+        $selectFields = @('IntuneDeviceId', 'PolicyBaseTypeName', 'PolicyId', 'PolicyStatus', 'UPN', 'UserId', 'PspdpuLastModifiedTimeUtc', 'PolicyName', 'UnifiedPolicyType')
+        $reportData = ConvertFrom-InTUIReportResponse -Response $data.ModernPolicies -DefaultFields $selectFields
+
+        foreach ($rowData in $reportData) {
+            $policyStatus = ConvertTo-InTUIReportPolicyStatus -Status $rowData.PolicyStatus
+
+            $stateColor = switch ($policyStatus) {
+                'Succeeded'     { 'green' }
+                'NotApplicable' { 'grey' }
+                'Failed'        { 'red' }
+                'Conflict'      { 'orange1' }
+                default         { 'yellow' }
             }
-            $configRows += , @(
-                ($state.displayName ?? 'N/A'),
-                "[$stateColor]$($state.state ?? 'N/A')[/]",
-                ($state.platformType ?? 'N/A')
+
+            $policyType = switch ($rowData.PolicyBaseTypeName) {
+                'DeviceManagementConfigurationPolicy'                   { 'Settings Catalog' }
+                'Microsoft.Management.Services.Api.DeviceConfiguration' { 'Device Configuration' }
+                'DeviceConfigurationAdmxPolicy'                         { 'ADMX' }
+                'Microsoft.Management.Services.Api.DeviceManagementIntent' { 'Device Intent' }
+                default { $rowData.UnifiedPolicyType ?? 'N/A' }
+            }
+
+            $rows += , @(
+                (ConvertTo-InTUISafeMarkup -Text ($rowData.PolicyName ?? 'N/A')),
+                "[$stateColor]$policyStatus[/]",
+                $policyType
             )
         }
-        Render-InTUITable -Title "Configuration Profiles ($($configItems.Count))" -Columns @('Profile Name', 'State', 'Platform') -Rows $configRows -BorderColor Blue
+    }
+
+    if ($rows.Count -gt 0) {
+        Render-InTUITable -Title "Configuration Profiles ($($rows.Count))" -Columns @('Profile Name', 'State', 'Type') -Rows $rows -BorderColor Blue
     }
     else {
         Show-InTUIPanel -Title "[blue]Configuration Profiles[/]" -Content "[grey]No configuration profile states found.[/]" -BorderColor Blue
@@ -156,34 +195,35 @@ function Show-InTUIDeviceWhatsApplied {
     $complianceItems = if ($data.ComplianceStates.value) { @($data.ComplianceStates.value) } else { @() }
     if ($complianceItems.Count -gt 0) {
         $compRows = @()
+        $seen = @{}
         foreach ($state in $complianceItems) {
-            $stateColor = Get-InTUIComplianceColor -State $state.state
+            $name = ($state.displayName ?? 'N/A').Trim()
+            $status = $state.state ?? 'N/A'
+            $key = "$name|$status"
+            if ($seen.ContainsKey($key)) { continue }
+            $seen[$key] = $true
+            $stateColor = Get-InTUIComplianceColor -State $status
             $compRows += , @(
-                ($state.displayName ?? 'N/A'),
-                "[$stateColor]$($state.state ?? 'N/A')[/]"
+                (ConvertTo-InTUISafeMarkup -Text $name),
+                "[$stateColor]$status[/]"
             )
         }
-        Render-InTUITable -Title "Compliance Policies ($($complianceItems.Count))" -Columns @('Policy Name', 'State') -Rows $compRows -BorderColor Green
+        Render-InTUITable -Title "Compliance Policies ($($compRows.Count))" -Columns @('Policy Name', 'State') -Rows $compRows -BorderColor Green
     }
     else {
         Show-InTUIPanel -Title "[green]Compliance Policies[/]" -Content "[grey]No compliance policy states found.[/]" -BorderColor Green
     }
 
     # App Assignments
-    if ($data.AppIntents -and $data.AppIntents.value) {
-        $allApps = @()
-        foreach ($intentState in $data.AppIntents.value) {
-            if ($intentState.mobileAppList) {
-                $allApps += @($intentState.mobileAppList)
-            }
-        }
+    if ($data.AppIntents) {
+        $allApps = Get-InTUIAppIntentMobileApp -Response $data.AppIntents
 
         if ($allApps.Count -gt 0) {
             $appRows = @()
             foreach ($app in $allApps) {
                 $installColor = Get-InTUIInstallStateColor -State $app.installState
                 $appRows += , @(
-                    ($app.displayName ?? 'N/A'),
+                    (ConvertTo-InTUISafeMarkup -Text ($app.displayName ?? 'N/A')),
                     "[$installColor]$($app.installState ?? 'N/A')[/]",
                     ($app.mobileAppIntent ?? 'N/A')
                 )

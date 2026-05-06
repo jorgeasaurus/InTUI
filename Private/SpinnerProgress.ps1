@@ -38,12 +38,20 @@ function Write-InTUISpinnerComplete {
     [CmdletBinding()]
     param(
         [Parameter()]
-        [string]$Message = 'Done'
+        [string]$Message = 'Done',
+
+        [Parameter()]
+        [switch]$ClearOnly
     )
 
     $palette = Get-InTUIColorPalette
     $reset = $palette.Reset
     $clearWidth = [math]::Max(80, [Console]::WindowWidth - 1)
+
+    if ($ClearOnly) {
+        Write-Host "`r$(' ' * $clearWidth)`r" -NoNewline
+        return
+    }
 
     Write-Host "`r$(' ' * $clearWidth)`r$($palette.Green)+$reset $Message"
 }
@@ -60,7 +68,10 @@ function Invoke-InTUIWithSpinner {
         [string]$Title,
 
         [Parameter(Mandatory)]
-        [scriptblock]$ScriptBlock
+        [scriptblock]$ScriptBlock,
+
+        [Parameter()]
+        [switch]$ClearOnComplete
     )
 
     # Start background job approach won't work for script-scope vars.
@@ -85,7 +96,7 @@ function Invoke-InTUIWithSpinner {
     }
 
     $sw.Stop()
-    Write-InTUISpinnerComplete -Message (Strip-InTUIMarkup -Text $Title)
+    Write-InTUISpinnerComplete -Message (Strip-InTUIMarkup -Text $Title) -ClearOnly:$ClearOnComplete
 
     return $result
 }

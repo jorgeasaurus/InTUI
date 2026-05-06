@@ -612,6 +612,12 @@ function Show-InTUIBitLockerKeysForDevice {
         Invoke-InTUIGraphRequest -Uri "/informationProtection/bitlocker/recoveryKeys?`$filter=deviceId eq '$AzureADDeviceId'"
     }
 
+    if ($null -eq $keys -and (Test-InTUIBitLockerPermissionError -ErrorInfo $script:LastGraphError)) {
+        Show-InTUIBitLockerPermissionWarning
+        Read-InTUIKey
+        return
+    }
+
     if (-not $keys.value) {
         Show-InTUIWarning "No BitLocker recovery keys found for '$DeviceName'."
         Read-InTUIKey
@@ -653,7 +659,8 @@ function Show-InTUIBitLockerKeysForDevice {
                 Invoke-InTUIGraphRequest -Uri "/informationProtection/bitlocker/recoveryKeys/$($selectedKey.id)?`$select=key"
             }
 
-            if ($fullKey.key) {
+            $recoveryKey = $fullKey.key ?? $fullKey.value.key
+            if ($recoveryKey) {
                 $keyContent = @"
 [bold white]BitLocker Recovery Key[/]
 
@@ -662,9 +669,12 @@ function Show-InTUIBitLockerKeysForDevice {
 [grey]Volume Type:[/]   $($selectedKey.volumeType ?? 'N/A')
 [grey]Created:[/]       $(Format-InTUIDate -DateString $selectedKey.createdDateTime)
 
-[bold red]Recovery Key:[/]  [white]$($fullKey.key)[/]
+[bold red]Recovery Key:[/]  [white]$recoveryKey[/]
 "@
                 Show-InTUIPanel -Title "[red]Recovery Key[/]" -Content $keyContent -BorderColor Red
+            }
+            elseif ($null -eq $fullKey -and (Test-InTUIBitLockerPermissionError -ErrorInfo $script:LastGraphError)) {
+                Show-InTUIBitLockerPermissionWarning
             }
             else {
                 Show-InTUIWarning "Could not retrieve the recovery key. Check permissions."
@@ -673,6 +683,29 @@ function Show-InTUIBitLockerKeysForDevice {
             Read-InTUIKey
         }
     }
+}
+
+function Test-InTUIBitLockerPermissionError {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [object]$ErrorInfo
+    )
+
+    if ($null -eq $ErrorInfo) {
+        return $false
+    }
+
+    $statusCode = [string]$ErrorInfo.StatusCode
+    return ($statusCode -eq 'Forbidden' -or $statusCode -eq '403') -and
+        ([string]$ErrorInfo.Uri -match '/informationProtection/bitlocker/recoveryKeys')
+}
+
+function Show-InTUIBitLockerPermissionWarning {
+    [CmdletBinding()]
+    param()
+
+    Show-InTUIWarning "BitLocker recovery keys require Graph permissions BitlockerKey.ReadBasic.All and BitlockerKey.Read.All plus a supported Entra role. Reconnect to Microsoft Graph and consent/admin-consent these scopes."
 }
 
 function Show-InTUIDefenderOverview {

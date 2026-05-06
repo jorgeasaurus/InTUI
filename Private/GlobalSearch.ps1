@@ -1,5 +1,24 @@
-﻿# InTUI Global Search
+# InTUI Global Search
 # Cross-entity incremental search
+
+function Show-InTUIGlobalSearchShell {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$SearchTerm
+    )
+
+    Clear-Host
+    Show-InTUIHeader -Compact
+    Show-InTUIBreadcrumb -Path @('Home', 'Global Search')
+
+    Write-InTUIText "[bold]Global Search[/]"
+    Write-InTUIText "[grey]Search across devices, apps, users, and groups[/]"
+    if ($SearchTerm) {
+        Write-InTUIText "[grey]Search:[/] [cyan]$SearchTerm[/]"
+    }
+    Write-InTUIText ""
+}
 
 function Invoke-InTUIGlobalSearch {
     <#
@@ -12,13 +31,7 @@ function Invoke-InTUIGlobalSearch {
     $exitSearch = $false
 
     while (-not $exitSearch) {
-        Clear-Host
-        Show-InTUIHeader
-        Show-InTUIBreadcrumb -Path @('Home', 'Global Search')
-
-        Write-InTUIText "[bold]Global Search[/]"
-        Write-InTUIText "[grey]Search across devices, apps, users, and groups[/]"
-        Write-InTUIText ""
+        Show-InTUIGlobalSearchShell
 
         $searchTerm = Read-InTUITextInput -Message "[blue]Enter search term (min 3 characters)[/]"
 
@@ -34,7 +47,7 @@ function Invoke-InTUIGlobalSearch {
 
         Write-InTUILog -Message "Global search initiated" -Context @{ SearchTerm = $searchTerm }
 
-        $results = Show-InTUILoading -Title "[blue]Searching...[/]" -ScriptBlock {
+        $results = Show-InTUILoading -Title "[blue]Searching...[/]" -ClearOnComplete -ScriptBlock {
             $safe = ConvertTo-InTUISafeFilterValue -Value $searchTerm
             $allResults = @{
                 Devices = @()
@@ -73,6 +86,7 @@ function Invoke-InTUIGlobalSearch {
         $totalCount = $results.Devices.Count + $results.Apps.Count + $results.Users.Count + $results.Groups.Count
 
         if ($totalCount -eq 0) {
+            Show-InTUIGlobalSearchShell -SearchTerm $searchTerm
             Show-InTUIWarning "No results found for '$searchTerm'."
             Read-InTUIKey
             continue
@@ -137,6 +151,7 @@ function Invoke-InTUIGlobalSearch {
         $resultChoices += 'New Search'
         $resultChoices += 'Back to Home'
 
+        Show-InTUIGlobalSearchShell -SearchTerm $searchTerm
         Show-InTUIStatusBar -Total $totalCount -Showing $totalCount -FilterText "Search: $searchTerm"
 
         $selection = Show-InTUIMenu -Title "[blue]Search Results[/]" -Choices $resultChoices -PageSize 20

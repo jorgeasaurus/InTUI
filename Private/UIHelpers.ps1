@@ -39,7 +39,10 @@ function Show-InTUIHeader {
     #>
     [CmdletBinding()]
     param(
-        [string]$Subtitle
+        [string]$Subtitle,
+
+        [Parameter()]
+        [switch]$Compact
     )
 
     $palette = Get-InTUIColorPalette
@@ -77,7 +80,9 @@ function Show-InTUIHeader {
     $tagline = 'Intune Terminal User Interface'
     $taglinePad = & $centerPad $tagline.Length
     Write-Host "$(' ' * $taglinePad)$($palette.Dim)$tagline$reset"
-    Write-Host ""
+    if (-not $Compact) {
+        Write-Host ""
+    }
 
     if ($script:Connected) {
         $tenant = if ($script:TenantId) {
@@ -117,7 +122,9 @@ function Show-InTUIHeader {
     # Gradient bottom border
     $gradientBottom = Get-InTUIGradientLine -Character ([char]0x2500) -Width $borderWidth
     Write-Host "$(' ' * (& $centerPad $borderWidth))$gradientBottom"
-    Write-Host ""
+    if (-not $Compact) {
+        Write-Host ""
+    }
 }
 
 function Show-InTUIBreadcrumb {
@@ -235,13 +242,13 @@ function Show-InTUIMultiSelect {
     )
 
     if ($script:HasArrowKeySupport) {
-        $indices = Show-InTUIMenuArrowMulti -Title $Title -Choices $Choices -PageSize $PageSize
+        $indices = @(Show-InTUIMenuArrowMulti -Title $Title -Choices $Choices -PageSize $PageSize)
     }
     else {
-        $indices = Show-InTUIMenuClassic -Title $Title -Choices $Choices -MultiSelect
+        $indices = @(Show-InTUIMenuClassic -Title $Title -Choices $Choices -MultiSelect)
     }
 
-    if (-not $indices -or $indices.Count -eq 0) { return @() }
+    if ($indices.Count -eq 0) { return @() }
 
     $selected = @()
     foreach ($idx in $indices) {
@@ -249,7 +256,7 @@ function Show-InTUIMultiSelect {
             $selected += $Choices[$idx]
         }
     }
-    return $selected
+    return , $selected
 }
 
 function Get-InTUIChoiceMap {
@@ -351,10 +358,13 @@ function Show-InTUILoading {
         [string]$Title,
 
         [Parameter(Mandatory)]
-        [scriptblock]$ScriptBlock
+        [scriptblock]$ScriptBlock,
+
+        [Parameter()]
+        [switch]$ClearOnComplete
     )
 
-    Invoke-InTUIWithSpinner -Title $Title -ScriptBlock $ScriptBlock
+    Invoke-InTUIWithSpinner -Title $Title -ScriptBlock $ScriptBlock -ClearOnComplete:$ClearOnComplete
 }
 
 function Show-InTUIError {

@@ -4,7 +4,7 @@
 # InTUI - Intune Terminal User Interface
 # A custom ANSI-based TUI for Microsoft Intune management
 
-$script:InTUIVersion = '1.0.0'
+$script:InTUIVersion = '1.0.1'
 $script:PageSize = 50
 $script:Connected = $false
 $script:CloudEnvironment = 'Global'

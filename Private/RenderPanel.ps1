@@ -1,3 +1,107 @@
+function Split-InTUIPlainTextByDisplayWidth {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Text,
+
+        [Parameter(Mandatory)]
+        [int]$Width
+    )
+
+    if ([string]::IsNullOrEmpty($Text)) {
+        return @('')
+    }
+
+    if ($Width -le 0) {
+        return @($Text)
+    }
+
+    $segments = [System.Collections.Generic.List[string]]::new()
+    $remaining = $Text
+
+    while ((Measure-InTUIDisplayWidth -Text $remaining) -gt $Width) {
+        $cutLength = 0
+        $lineWidth = 0
+
+        for ($index = 0; $index -lt $remaining.Length; $index++) {
+            $charWidth = Measure-InTUIDisplayWidth -Text ([string]$remaining[$index])
+            if (($lineWidth + $charWidth) -gt $Width) {
+                break
+            }
+
+            $lineWidth += $charWidth
+            $cutLength++
+        }
+
+        if ($cutLength -le 0) {
+            $cutLength = 1
+        }
+
+        $candidate = $remaining.Substring(0, $cutLength).TrimEnd()
+        if ($cutLength -lt $remaining.Length -and $remaining[$cutLength] -eq ' ') {
+            $segments.Add($candidate)
+            $remaining = $remaining.Substring($cutLength + 1).TrimStart()
+        }
+        elseif ($candidate.LastIndexOf(' ') -gt 0) {
+            $breakIndex = $candidate.LastIndexOf(' ')
+            $segments.Add($candidate.Substring(0, $breakIndex).TrimEnd())
+            $remaining = $remaining.Substring($breakIndex + 1).TrimStart()
+        }
+        else {
+            $segments.Add($candidate)
+            $remaining = $remaining.Substring($cutLength)
+        }
+    }
+
+    $segments.Add($remaining)
+    return $segments.ToArray()
+}
+
+function Split-InTUIPanelContentLine {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Line,
+
+        [Parameter(Mandatory)]
+        [int]$Width
+    )
+
+    $plainText = Strip-InTUIMarkup -Text $Line
+    $plainWidth = Measure-InTUIDisplayWidth -Text $plainText
+
+    if ($plainWidth -le $Width) {
+        return @([pscustomobject]@{
+                Text         = ConvertFrom-InTUIMarkup -Text $Line
+                DisplayWidth = $plainWidth
+            })
+    }
+
+    $style = $null
+    $textToWrap = $plainText
+    if ($Line -match '^\[(?<Style>[^\]]+)\](?<Text>.*)\[/\]$') {
+        $style = $Matches.Style
+        $textToWrap = $Matches.Text
+    }
+
+    $wrappedLines = [System.Collections.Generic.List[object]]::new()
+    foreach ($wrappedText in (Split-InTUIPlainTextByDisplayWidth -Text $textToWrap -Width $Width)) {
+        $displayText = $wrappedText
+        if ($null -ne $style) {
+            $displayText = ConvertFrom-InTUIMarkup -Text "[$style]$wrappedText[/]"
+        }
+
+        $wrappedLines.Add([pscustomobject]@{
+                Text         = $displayText
+                DisplayWidth = Measure-InTUIDisplayWidth -Text $wrappedText
+            })
+    }
+
+    return $wrappedLines.ToArray()
+}
+
 function Render-InTUIPanel {
     <#
     .SYNOPSIS
@@ -64,27 +168,10 @@ function Render-InTUIPanel {
     $lines = $Content -split "`n"
     foreach ($line in $lines) {
         $line = $line.TrimEnd("`r")
-        $plainLine = Strip-InTUIMarkup -Text $line
-        $ansiLine = ConvertFrom-InTUIMarkup -Text $line
-        $displayWidth = Measure-InTUIDisplayWidth -Text $plainLine
-
-        # Truncate based on visual display width
-        if ($displayWidth -gt $contentWidth) {
-            # Walk the plain text to find the cut point at the right visual column
-            $cutLen = 0
-            $cutWidth = 0
-            for ($ci = 0; $ci -lt $plainLine.Length; $ci++) {
-                $charWidth = Measure-InTUIDisplayWidth -Text ([string]$plainLine[$ci])
-                if (($cutWidth + $charWidth) -gt ($contentWidth - 3)) { break }
-                $cutWidth += $charWidth
-                $cutLen++
-            }
-            $plainLine = $plainLine.Substring(0, $cutLen) + '...'
-            $ansiLine = $plainLine
-            $displayWidth = $cutWidth + 3
+        foreach ($wrappedLine in (Split-InTUIPanelContentLine -Line $line -Width $contentWidth)) {
+            $padRight = [Math]::Max(0, $contentWidth - $wrappedLine.DisplayWidth)
+            Write-Host "$indent$borderAnsi$vertical$reset $($wrappedLine.Text)$reset$(' ' * $padRight) $borderAnsi$vertical$reset"
         }
-        $padRight = [Math]::Max(0, $contentWidth - $displayWidth)
-        Write-Host "$indent$borderAnsi$vertical$reset $ansiLine$reset$(' ' * $padRight) $borderAnsi$vertical$reset"
     }
 
     # Bottom border

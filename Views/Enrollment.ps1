@@ -72,15 +72,17 @@ function Show-InTUIAutopilotDeviceList {
         Show-InTUIHeader
         Show-InTUIBreadcrumb -Path @('Home', 'Enrollment', 'Autopilot Devices')
 
-        $params = @{
-            Uri      = '/deviceManagement/windowsAutopilotDeviceIdentities'
-            Beta     = $true
-            PageSize = 25
-            Select   = 'id,displayName,serialNumber,model,manufacturer,groupTag,purchaseOrderIdentifier,enrollmentState,lastContactedDateTime'
-        }
+        $params = New-InTUIAutopilotDeviceListQueryParams
 
         $devices = Show-InTUILoading -Title "[steelblue1_1]Loading Autopilot devices...[/]" -ScriptBlock {
             Get-InTUIPagedResults @params
+        }
+
+        if ((Test-InTUIAutopilotDeviceListError -ErrorInfo $script:LastGraphError)) {
+            Show-InTUIWarning "Failed to load Autopilot devices. Graph returned: $($script:LastGraphError.Message)"
+            Read-InTUIKey
+            $exitList = $true
+            continue
         }
 
         if ($null -eq $devices -or $devices.Results.Count -eq 0) {
@@ -117,6 +119,33 @@ function Show-InTUIAutopilotDeviceList {
             }
         }
     }
+}
+
+function New-InTUIAutopilotDeviceListQueryParams {
+    <#
+    .SYNOPSIS
+        Builds a small Autopilot device list query for responsive rendering.
+    #>
+    [CmdletBinding()]
+    param()
+
+    return @{
+        Uri      = '/deviceManagement/windowsAutopilotDeviceIdentities'
+        Beta     = $true
+        PageSize = 10
+        Select   = 'id,serialNumber,model,groupTag,enrollmentState,lastContactedDateTime'
+    }
+}
+
+function Test-InTUIAutopilotDeviceListError {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [object]$ErrorInfo
+    )
+
+    return $null -ne $ErrorInfo -and
+        [string]$ErrorInfo.Uri -match '/deviceManagement/windowsAutopilotDeviceIdentities'
 }
 
 function Show-InTUIAutopilotDeviceDetail {

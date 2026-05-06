@@ -87,17 +87,7 @@ function Show-InTUICompliancePolicyList {
         else { $breadcrumb += 'All Policies' }
         Show-InTUIBreadcrumb -Path $breadcrumb
 
-        $params = @{
-            Uri      = '/deviceManagement/deviceCompliancePolicies'
-            Beta     = $true
-            PageSize = 25
-            Select   = 'id,displayName,description,lastModifiedDateTime,createdDateTime,version'
-        }
-
-        if ($SearchTerm) {
-            $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
-            $params['Filter'] = "contains(displayName,'$safe')"
-        }
+        $params = New-InTUICompliancePolicyListQueryParams -SearchTerm $SearchTerm
 
         $policies = Show-InTUILoading -Title "[cyan]Loading compliance policies...[/]" -ScriptBlock {
             Get-InTUIPagedResults @params
@@ -110,20 +100,13 @@ function Show-InTUICompliancePolicyList {
             continue
         }
 
-        # Client-side platform filtering (API doesn't support $filter on @odata.type)
-        $filteredResults = $policies.Results
-        if ($PlatformFilter) {
-            $filteredResults = @($policies.Results | Where-Object {
-                $typeInfo = Get-InTUICompliancePolicyType -ODataType $_.'@odata.type'
-                $typeInfo.Platform -eq $PlatformFilter
-            })
-
-            if ($filteredResults.Count -eq 0) {
-                Show-InTUIWarning "No $PlatformFilter compliance policies found."
-                Read-InTUIKey
-                $exitList = $true
-                continue
-            }
+        $filteredResults = Get-InTUIFilteredCompliancePolicy -Policy $policies.Results -PlatformFilter $PlatformFilter -SearchTerm $SearchTerm
+        if ($filteredResults.Count -eq 0) {
+            $message = if ($PlatformFilter) { "No $PlatformFilter compliance policies found." } else { "No compliance policies found." }
+            Show-InTUIWarning $message
+            Read-InTUIKey
+            $exitList = $true
+            continue
         }
 
         $policyChoices = @()
@@ -152,6 +135,61 @@ function Show-InTUICompliancePolicyList {
             }
         }
     }
+}
+
+function New-InTUICompliancePolicyListQueryParams {
+    <#
+    .SYNOPSIS
+        Builds Graph query parameters for compliance policy list retrieval.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$SearchTerm
+    )
+
+    return @{
+        Uri      = '/deviceManagement/deviceCompliancePolicies'
+        Beta     = $true
+        PageSize = if ($SearchTerm) { 200 } else { 25 }
+        Select   = 'id,displayName,description,lastModifiedDateTime,createdDateTime,version'
+    }
+}
+
+function Get-InTUIFilteredCompliancePolicy {
+    <#
+    .SYNOPSIS
+        Applies client-side compliance policy filters that Graph does not reliably support.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [array]$Policy,
+
+        [Parameter()]
+        [string]$PlatformFilter,
+
+        [Parameter()]
+        [string]$SearchTerm
+    )
+
+    $filteredPolicy = @($Policy)
+
+    if ($PlatformFilter) {
+        $filteredPolicy = @($filteredPolicy | Where-Object {
+            $typeInfo = Get-InTUICompliancePolicyType -ODataType $_.'@odata.type'
+            $typeInfo.Platform -eq $PlatformFilter
+        })
+    }
+
+    if ($SearchTerm) {
+        $filteredPolicy = @($filteredPolicy | Where-Object {
+            $displayName = $_.displayName ?? ''
+            $displayName.IndexOf($SearchTerm, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+        })
+    }
+
+    return $filteredPolicy
 }
 
 function Get-InTUICompliancePolicyType {

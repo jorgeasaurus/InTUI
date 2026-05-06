@@ -114,7 +114,7 @@ function Start-InTUI {
 
     while (-not $exitApp) {
         Clear-Host
-        Show-InTUIHeader
+        Show-InTUIHeader -Compact
         Show-InTUIBreadcrumb -Path @('Home')
         Show-InTUIDashboard
 

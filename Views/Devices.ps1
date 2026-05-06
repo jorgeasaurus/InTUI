@@ -218,6 +218,7 @@ $icon [bold]$($device.deviceName)[/]
         Show-InTUIPanel -Title "[blue]Device Properties[/]" -Content $propertiesContent -BorderColor Blue
 
         $hwContent = @"
+[grey]Intune Device ID:[/]    $($device.id ?? 'N/A')
 [grey]Storage (Total):[/]     $([math]::Round(($device.totalStorageSpaceInBytes / 1GB), 1)) GB
 [grey]Storage (Free):[/]      $([math]::Round(($device.freeStorageSpaceInBytes / 1GB), 1)) GB
 [grey]Physical Memory:[/]     $([math]::Round(($device.physicalMemoryInBytes / 1GB), 1)) GB
@@ -294,7 +295,7 @@ $icon [bold]$($device.deviceName)[/]
                 $newName = Read-InTUITextInput -Message "[blue]Enter new device name[/]"
                 if ($newName) {
                     $body = @{ deviceName = $newName }
-                    $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId" -Method PATCH -Body $body -Beta
+                    $result = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId/setDeviceName" -Method POST -Body $body -Beta
                     if ($null -ne $result) {
                         Show-InTUISuccess "Device renamed to '$newName'. Change will apply on next sync."
                     }
@@ -377,7 +378,7 @@ function Invoke-InTUIDeviceAction {
 function Show-InTUIDeviceConfigStatus {
     <#
     .SYNOPSIS
-        Shows device configuration profile status.
+        Shows device configuration profile status including modern Settings Catalog policies.
     #>
     [CmdletBinding()]
     param(
@@ -392,35 +393,83 @@ function Show-InTUIDeviceConfigStatus {
     Show-InTUIHeader
     Show-InTUIBreadcrumb -Path @('Home', 'Devices', $DeviceName, 'Configuration Status')
 
-    $configs = Show-InTUILoading -Title "[blue]Loading configuration status...[/]" -ScriptBlock {
-        Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId/deviceConfigurationStates" -Beta
+    $data = Show-InTUILoading -Title "[blue]Loading configuration status...[/]" -ScriptBlock {
+        # Legacy deviceConfiguration states
+        $legacy = Invoke-InTUIGraphRequest -Uri "/deviceManagement/managedDevices/$DeviceId/deviceConfigurationStates" -Beta
+
+        # Modern Settings Catalog / configuration policies via report endpoint
+        $reportBody = @{
+            top     = 50
+            skip    = 0
+            select  = @('IntuneDeviceId', 'PolicyBaseTypeName', 'PolicyId', 'PolicyStatus', 'UPN', 'UserId', 'PspdpuLastModifiedTimeUtc', 'PolicyName', 'UnifiedPolicyType')
+            orderBy = @('PolicyName')
+            search  = ''
+            filter  = "((PolicyBaseTypeName eq 'Microsoft.Management.Services.Api.DeviceConfiguration') or (PolicyBaseTypeName eq 'DeviceManagementConfigurationPolicy') or (PolicyBaseTypeName eq 'DeviceConfigurationAdmxPolicy') or (PolicyBaseTypeName eq 'Microsoft.Management.Services.Api.DeviceManagementIntent')) and (IntuneDeviceId eq '$DeviceId')"
+        }
+
+        $modern = Invoke-InTUIGraphRequest -Uri "/deviceManagement/reports/getConfigurationPoliciesReportForDevice" -Method POST -Body $reportBody -Beta
+
+        @{
+            Legacy = $legacy
+            Modern = $modern
+        }
     }
 
-    if (-not $configs.value) {
+    $rows = @()
+
+    # Legacy deviceConfiguration states
+    if ($data.Legacy -and $data.Legacy.value) {
+        foreach ($config in $data.Legacy.value) {
+            $stateColor = switch ($config.state) {
+                'compliant'    { 'green' }
+                'notCompliant' { 'red' }
+                'error'        { 'red' }
+                'notApplicable' { 'grey' }
+                default        { 'yellow' }
+            }
+            $rows += , @(
+                $config.displayName,
+                "[$stateColor]$($config.state)[/]",
+                ($config.platformType ?? 'N/A'),
+                '--'
+            )
+        }
+    }
+
+    # Modern configuration policies from report endpoint
+    if ($data.Modern) {
+        $selectFields = @('IntuneDeviceId', 'PolicyBaseTypeName', 'PolicyId', 'PolicyStatus', 'UPN', 'UserId', 'PspdpuLastModifiedTimeUtc', 'PolicyName', 'UnifiedPolicyType')
+        $reportData = ConvertFrom-InTUIReportResponse -Response $data.Modern -DefaultFields $selectFields
+
+        foreach ($rowData in $reportData) {
+            $policyStatus = ConvertTo-InTUIReportPolicyStatus -Status $rowData.PolicyStatus
+
+            $stateColor = switch ($policyStatus) {
+                'Succeeded'     { 'green' }
+                'NotApplicable' { 'grey' }
+                'Failed'        { 'red' }
+                'Conflict'      { 'orange1' }
+                default         { 'yellow' }
+            }
+
+            $userText = if ([string]::IsNullOrWhiteSpace($rowData.UPN)) { 'System account' } else { $rowData.UPN }
+
+            $rows += , @(
+                (ConvertTo-InTUISafeMarkup -Text ($rowData.PolicyName ?? 'N/A')),
+                "[$stateColor]$policyStatus[/]",
+                ($rowData.UnifiedPolicyType ?? 'N/A'),
+                (ConvertTo-InTUISafeMarkup -Text $userText)
+            )
+        }
+    }
+
+    if ($rows.Count -eq 0) {
         Show-InTUIWarning "No configuration profiles assigned to this device."
         Read-InTUIKey
         return
     }
 
-    $rows = @()
-    foreach ($config in $configs.value) {
-        $stateColor = switch ($config.state) {
-            'compliant'    { 'green' }
-            'notCompliant' { 'red' }
-            'error'        { 'red' }
-            'notApplicable' { 'grey' }
-            default        { 'yellow' }
-        }
-
-        $rows += , @(
-            $config.displayName,
-            "[$stateColor]$($config.state)[/]",
-            ($config.platformType ?? 'N/A'),
-            ($config.settingCount ?? '0')
-        )
-    }
-
-    Show-InTUITable -Title "Configuration Profiles" -Columns @('Profile Name', 'State', 'Platform', 'Settings') -Rows $rows
+    Show-InTUITable -Title "Configuration Profiles ($($rows.Count))" -Columns @('Profile Name', 'State', 'Type', 'User') -Rows $rows
 
     Read-InTUIKey
 }

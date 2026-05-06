@@ -18,13 +18,17 @@ function Connect-InTUIGraph {
         [Parameter()]
         [string[]]$Scopes = @(
             'DeviceManagementManagedDevices.ReadWrite.All',
+            'DeviceManagementManagedDevices.PrivilegedOperations.All',
             'DeviceManagementApps.ReadWrite.All',
             'User.Read.All',
             'Group.Read.All',
             'GroupMember.Read.All',
             'DeviceManagementConfiguration.Read.All',
+            'DeviceManagementServiceConfig.Read.All',
             'Directory.Read.All',
-            'AuditLog.Read.All'
+            'AuditLog.Read.All',
+            'BitlockerKey.ReadBasic.All',
+            'BitlockerKey.Read.All'
         ),
 
         [Parameter()]
@@ -195,6 +199,7 @@ function Invoke-InTUIGraphRequest {
     }
 
     try {
+        $script:LastGraphError = $null
         $response = Invoke-MgGraphRequest @params
 
         if ($All -and $Method -eq 'GET') {
@@ -253,6 +258,12 @@ function Invoke-InTUIGraphRequest {
             }
         }
         Write-InTUILog -Level 'ERROR' -Message "Graph API Error: $errorMessage" -Context @{ Uri = $fullUri; Method = $Method }
+        $script:LastGraphError = [pscustomobject]@{
+            Message    = $errorMessage
+            Uri        = $fullUri
+            Method     = $Method
+            StatusCode = $_.Exception.Response.StatusCode
+        }
         Write-InTUIText "[red]Graph API Error: $errorMessage[/]"
         return $null
     }
@@ -305,7 +316,8 @@ function Get-InTUIPagedResults {
         $queryParams += "`$filter=$Filter"
     }
     if ($Search) {
-        $queryParams += "`$search=`"$Search`""
+        $searchValue = if ($Search.StartsWith('"')) { $Search } else { "`"$Search`"" }
+        $queryParams += "`$search=$searchValue"
     }
     if ($Select) {
         $queryParams += "`$select=$Select"

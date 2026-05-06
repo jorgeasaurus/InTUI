@@ -273,6 +273,10 @@ function Strip-InTUIMarkup {
     $result = $result -replace "`0LBRACKET`0", '['
     $result = $result -replace "`0RBRACKET`0", ']'
 
+    $styleNames = 'blue|green|red|yellow|cyan|cyan1|grey|gray|white|bold|dim|italic|deepskyblue1|darkorange|orange1|steelblue1_1|orange|mauve|teal|peach'
+    $result = [regex]::Replace($result, "\[(?:$styleNames)(?:\s+(?:$styleNames))*\]\s*", '', 'IgnoreCase')
+    $result = $result -replace '\[/\]', ''
+
     return $result
 }
 

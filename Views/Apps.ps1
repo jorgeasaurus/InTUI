@@ -217,6 +217,90 @@ function Get-InTUIAppTypeFriendlyName {
     }
 }
 
+function Get-InTUIAppDeviceInstallStatus {
+    <#
+    .SYNOPSIS
+        Gets device-level app install status using managed device app intent state data.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AppId,
+
+        [Parameter()]
+        [string]$AppName
+    )
+
+    $devices = Get-InTUIPagedResults -Uri '/deviceManagement/managedDevices' -Beta -PageSize 100 -Select 'id,deviceName,userId,userPrincipalName,osVersion,lastSyncDateTime'
+    if ($null -eq $devices -or $devices.Results.Count -eq 0) {
+        return @()
+    }
+
+    $statuses = foreach ($device in $devices.Results) {
+        if ([string]::IsNullOrWhiteSpace($device.userId)) {
+            continue
+        }
+
+        $intentState = Invoke-InTUIGraphRequest -Uri "/users('$($device.userId)')/mobileAppIntentAndStates('$($device.id)')" -Beta
+        $mobileApps = Get-InTUIAppIntentMobileApp -Response $intentState
+        $matchingApp = @($mobileApps | Where-Object {
+                $_.applicationId -eq $AppId -or
+                $_.id -eq $AppId -or
+                (-not [string]::IsNullOrWhiteSpace($AppName) -and $_.displayName -eq $AppName)
+            } | Select-Object -First 1)
+
+        if ($matchingApp.Count -eq 0) {
+            continue
+        }
+
+        [pscustomobject]@{
+            deviceName        = $device.deviceName
+            installState      = $matchingApp[0].installState
+            userPrincipalName = $device.userPrincipalName
+            osVersion         = $device.osVersion
+            lastSyncDateTime  = $device.lastSyncDateTime
+            displayVersion    = $matchingApp[0].displayVersion
+            mobileAppIntent   = $matchingApp[0].mobileAppIntent
+            errorCode         = $matchingApp[0].errorCode
+        }
+    }
+
+    return @($statuses)
+}
+
+function Get-InTUIAppUserInstallStatus {
+    <#
+    .SYNOPSIS
+        Gets user-level app install status using the Intune report action.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AppId
+    )
+
+    $reportBody = @{
+        filter  = "(ApplicationId eq '$(ConvertTo-InTUISafeFilterValue -Value $AppId)')"
+        select  = @(
+            'UserId'
+            'ApplicationId'
+            'UserName'
+            'UserPrincipalName'
+            'InstalledCount'
+            'FailedCount'
+            'PendingInstallCount'
+            'NotApplicableCount'
+            'NotInstalledCount'
+        )
+        skip    = 0
+        top     = 100
+        orderBy = @('UserName')
+    }
+
+    $response = Invoke-InTUIGraphRequest -Uri '/deviceManagement/reports/getUserInstallStatusReport' -Method POST -Body $reportBody -Beta
+    return ConvertFrom-InTUIReportResponse -Response $response -DefaultFields $reportBody.select
+}
+
 function Show-InTUIAppDetail {
     <#
     .SYNOPSIS
@@ -358,6 +442,130 @@ function Select-InTUIGroup {
     return $null
 }
 
+function Get-InTUIObjectPropertyValue {
+    <#
+    .SYNOPSIS
+        Reads a property from a hashtable or PSObject.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [AllowNull()]
+        [object]$InputObject,
+
+        [Parameter(Mandatory)]
+        [string]$PropertyName
+    )
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        if ($InputObject.Contains($PropertyName)) {
+            return $InputObject[$PropertyName]
+        }
+        return $null
+    }
+
+    $property = $InputObject.PSObject.Properties[$PropertyName]
+    if ($property) {
+        return $property.Value
+    }
+
+    return $null
+}
+
+function Get-InTUIAssignmentTargetSignature {
+    <#
+    .SYNOPSIS
+        Creates a stable comparison key for mobile app assignment targets.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [AllowNull()]
+        [object]$Target
+    )
+
+    $targetType = Get-InTUIObjectPropertyValue -InputObject $Target -PropertyName '@odata.type'
+    $groupId = Get-InTUIObjectPropertyValue -InputObject $Target -PropertyName 'groupId'
+    $filterId = Get-InTUIObjectPropertyValue -InputObject $Target -PropertyName 'deviceAndAppManagementAssignmentFilterId'
+    $filterType = Get-InTUIObjectPropertyValue -InputObject $Target -PropertyName 'deviceAndAppManagementAssignmentFilterType'
+
+    return @($targetType, $groupId, $filterId, $filterType) -join '|'
+}
+
+function ConvertTo-InTUIMobileAppAssignmentRequest {
+    <#
+    .SYNOPSIS
+        Converts a Graph mobileAppAssignment response into an assign action request item.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Assignment
+    )
+
+    return [ordered]@{
+        '@odata.type' = '#microsoft.graph.mobileAppAssignment'
+        intent        = Get-InTUIObjectPropertyValue -InputObject $Assignment -PropertyName 'intent'
+        target        = Get-InTUIObjectPropertyValue -InputObject $Assignment -PropertyName 'target'
+        settings      = Get-InTUIObjectPropertyValue -InputObject $Assignment -PropertyName 'settings'
+    }
+}
+
+function New-InTUIMobileAppAssignmentRequestBody {
+    <#
+    .SYNOPSIS
+        Builds an append-safe mobile app assign action body.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AppId,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Assignment
+    )
+
+    $existingAssignmentsResponse = Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/assignments" -Beta
+    if ($null -eq $existingAssignmentsResponse) {
+        return $null
+    }
+
+    $existingAssignments = if ($existingAssignmentsResponse.value) {
+        @($existingAssignmentsResponse.value)
+    }
+    elseif ($existingAssignmentsResponse -is [array]) {
+        @($existingAssignmentsResponse)
+    }
+    else {
+        @()
+    }
+
+    $newTargetSignature = Get-InTUIAssignmentTargetSignature -Target $Assignment.target
+    $newIntent = Get-InTUIObjectPropertyValue -InputObject $Assignment -PropertyName 'intent'
+
+    $mobileAppAssignments = @()
+    foreach ($existingAssignment in $existingAssignments) {
+        $existingTargetSignature = Get-InTUIAssignmentTargetSignature -Target (Get-InTUIObjectPropertyValue -InputObject $existingAssignment -PropertyName 'target')
+        $existingIntent = Get-InTUIObjectPropertyValue -InputObject $existingAssignment -PropertyName 'intent'
+
+        if ($existingTargetSignature -eq $newTargetSignature -and $existingIntent -eq $newIntent) {
+            continue
+        }
+
+        $mobileAppAssignments += ConvertTo-InTUIMobileAppAssignmentRequest -Assignment $existingAssignment
+    }
+
+    $mobileAppAssignments += ConvertTo-InTUIMobileAppAssignmentRequest -Assignment $Assignment
+
+    return @{
+        mobileAppAssignments = @($mobileAppAssignments)
+    }
+}
+
 function New-InTUIAppAssignment {
     <#
     .SYNOPSIS
@@ -442,16 +650,11 @@ function New-InTUIAppAssignment {
         return
     }
 
-    # Create assignment
-    $body = @{
-        mobileAppAssignments = @(
-            @{
-                '@odata.type' = '#microsoft.graph.mobileAppAssignment'
-                intent = $intent
-                target = $target
-                settings = $null
-            }
-        )
+    $assignment = @{
+        '@odata.type' = '#microsoft.graph.mobileAppAssignment'
+        intent        = $intent
+        target        = $target
+        settings      = $null
     }
 
     Write-InTUILog -Message "Creating app assignment" -Context @{
@@ -462,6 +665,10 @@ function New-InTUIAppAssignment {
     }
 
     $result = Show-InTUILoading -Title "[green]Creating assignment...[/]" -ScriptBlock {
+        $body = New-InTUIMobileAppAssignmentRequestBody -AppId $AppId -Assignment $assignment
+        if ($null -eq $body) {
+            return $null
+        }
         Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/assign" -Method POST -Body $body -Beta
     }
 
@@ -568,17 +775,17 @@ function Show-InTUIAppDeviceStatus {
     Show-InTUIBreadcrumb -Path @('Home', 'Apps', $AppName, 'Device Install Status')
 
     $statuses = Show-InTUILoading -Title "[green]Loading device install status...[/]" -ScriptBlock {
-        Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/deviceStatuses?`$top=50" -Beta
+        Get-InTUIAppDeviceInstallStatus -AppId $AppId -AppName $AppName
     }
 
-    if (-not $statuses.value) {
+    if (-not $statuses) {
         Show-InTUIWarning "No device install status data available."
         Read-InTUIKey
         return
     }
 
     $rows = @()
-    foreach ($status in $statuses.value) {
+    foreach ($status in $statuses) {
         $installColor = Get-InTUIInstallStateColor -State $status.installState
 
         $rows += , @(
@@ -613,22 +820,22 @@ function Show-InTUIAppUserStatus {
     Show-InTUIBreadcrumb -Path @('Home', 'Apps', $AppName, 'User Install Status')
 
     $statuses = Show-InTUILoading -Title "[green]Loading user install status...[/]" -ScriptBlock {
-        Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/userStatuses?`$top=50" -Beta
+        Get-InTUIAppUserInstallStatus -AppId $AppId
     }
 
-    if (-not $statuses.value) {
+    if (-not $statuses) {
         Show-InTUIWarning "No user install status data available."
         Read-InTUIKey
         return
     }
 
     $rows = @()
-    foreach ($status in $statuses.value) {
+    foreach ($status in $statuses) {
         $rows += , @(
-            ($status.userPrincipalName ?? $status.userName ?? 'N/A'),
-            ($status.installedDeviceCount ?? 0),
-            ($status.failedDeviceCount ?? 0),
-            ($status.notInstalledDeviceCount ?? 0)
+            ($status.UserPrincipalName ?? $status.UserName ?? 'N/A'),
+            ($status.InstalledCount ?? 0),
+            ($status.FailedCount ?? 0),
+            ($status.NotInstalledCount ?? 0)
         )
     }
 
@@ -820,18 +1027,21 @@ function Invoke-InTUIBulkAppAssignment {
     $successCount = 0
     $failCount = 0
 
-    $body = @{
-        mobileAppAssignments = @(
-            @{
-                '@odata.type' = '#microsoft.graph.mobileAppAssignment'
-                intent = $intent
-                target = $target
-                settings = $null
-            }
-        )
+    $assignment = @{
+        '@odata.type' = '#microsoft.graph.mobileAppAssignment'
+        intent        = $intent
+        target        = $target
+        settings      = $null
     }
 
     foreach ($app in $selectedAppObjects) {
+        $body = New-InTUIMobileAppAssignmentRequestBody -AppId $app.id -Assignment $assignment
+        if ($null -eq $body) {
+            $failCount++
+            Write-InTUILog -Level 'WARN' -Message "Failed to load existing app assignments" -Context @{ AppName = $app.displayName }
+            continue
+        }
+
         $result = Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$($app.id)/assign" -Method POST -Body $body -Beta
 
         if ($null -ne $result) {

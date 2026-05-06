@@ -197,16 +197,16 @@ function Show-InTUIAppFailureDetail {
     Write-InTUILog -Message "Loading install failures for app" -Context @{ AppId = $AppId; AppName = $AppName }
 
     $statuses = Show-InTUILoading -Title "[DarkOrange]Loading device statuses for $AppName...[/]" -ScriptBlock {
-        Invoke-InTUIGraphRequest -Uri "/deviceAppManagement/mobileApps/$AppId/deviceStatuses?`$top=50" -Beta
+        Get-InTUIAppDeviceInstallStatus -AppId $AppId -AppName $AppName
     }
 
-    if (-not $statuses.value) {
+    if (-not $statuses) {
         Show-InTUISuccess "No install status data available for this app."
         Read-InTUIKey
         return
     }
 
-    $failures = @($statuses.value | Where-Object { $_.installState -eq 'failed' })
+    $failures = @($statuses | Where-Object { $_.installState -eq 'failed' })
 
     if ($failures.Count -eq 0) {
         Show-InTUISuccess "No install failures for this app."

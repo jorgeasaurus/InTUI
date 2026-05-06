@@ -12,7 +12,7 @@ BeforeAll {
     $ProjectRoot = Split-Path -Parent $PSScriptRoot
 
     # Initialize module-scoped variables that would normally be set by InTUI.psm1
-    $script:InTUIVersion = '1.1.0'
+    $script:InTUIVersion = '1.0.1'
     $script:PageSize = 50
     $script:Connected = $false
     $script:CloudEnvironment = 'Global'
@@ -61,12 +61,600 @@ BeforeAll {
     . "$ProjectRoot/Private/AnsiGradient.ps1"
     . "$ProjectRoot/Private/AnsiWidth.ps1"
     . "$ProjectRoot/Private/AnsiCapability.ps1"
+    . "$ProjectRoot/Private/RenderPanel.ps1"
     . "$ProjectRoot/Private/Logging.ps1"
+    . "$ProjectRoot/Private/UIHelpers.ps1"
+    . "$ProjectRoot/Private/InputPrompt.ps1"
+    . "$ProjectRoot/Private/MenuArrowMulti.ps1"
     . "$ProjectRoot/Private/GraphHelpers.ps1"
+    . "$ProjectRoot/Private/ReportHelpers.ps1"
+    . "$ProjectRoot/Private/AppIntentHelpers.ps1"
+    . "$ProjectRoot/Private/GlobalSearch.ps1"
 
     # Functions from Views that contain pure logic
     . "$ProjectRoot/Views/Apps.ps1"
+    . "$ProjectRoot/Views/CompliancePolicies.ps1"
+    . "$ProjectRoot/Views/ConditionalAccess.ps1"
+    . "$ProjectRoot/Views/Dashboard.ps1"
+    . "$ProjectRoot/Views/Enrollment.ps1"
     . "$ProjectRoot/Views/Groups.ps1"
+    . "$ProjectRoot/Views/Security.ps1"
+}
+
+Describe 'App Intent Response Conversion' {
+    It 'Should extract apps from a device-specific mobileAppIntentAndState entity' {
+        $response = [pscustomobject]@{
+            id                      = 'intent-state-1'
+            managedDeviceIdentifier = 'device-1'
+            userId                  = 'user-1'
+            mobileAppList           = @(
+                [pscustomobject]@{
+                    displayName     = 'Google Chrome'
+                    installState    = 'installed'
+                    mobileAppIntent = 'available'
+                }
+            )
+        }
+
+        $result = Get-InTUIAppIntentMobileApp -Response $response
+
+        $result | Should -HaveCount 1
+        $result[0].displayName | Should -Be 'Google Chrome'
+        $result[0].installState | Should -Be 'installed'
+        $result[0].mobileAppIntent | Should -Be 'available'
+    }
+
+    It 'Should extract apps from raw JSON mobileAppIntentAndState entity responses' {
+        $response = @'
+{
+  "id": "intent-state-1",
+  "mobileAppList": [
+    {
+      "displayName": "Google Chrome",
+      "installState": "installed",
+      "mobileAppIntent": "available"
+    }
+  ],
+  "managedDeviceIdentifier": "device-1",
+  "userId": "user-1"
+}
+'@
+
+        $result = Get-InTUIAppIntentMobileApp -Response $response
+
+        $result | Should -HaveCount 1
+        $result[0].displayName | Should -Be 'Google Chrome'
+    }
+
+    It 'Should extract apps from mobileAppIntentAndStates collection responses' {
+        $response = [pscustomobject]@{
+            value = @(
+                [pscustomobject]@{
+                    mobileAppList = @(
+                        [pscustomobject]@{ displayName = 'Company Portal'; installState = 'installed'; mobileAppIntent = 'required' }
+                    )
+                }
+            )
+        }
+
+        $result = Get-InTUIAppIntentMobileApp -Response $response
+
+        $result | Should -HaveCount 1
+        $result[0].displayName | Should -Be 'Company Portal'
+    }
+}
+
+Describe 'Intune Report Response Conversion' {
+    BeforeAll {
+        $defaultFields = @('IntuneDeviceId', 'PolicyBaseTypeName', 'PolicyId', 'PolicyStatus', 'UPN', 'UserId', 'PspdpuLastModifiedTimeUtc', 'PolicyName', 'UnifiedPolicyType')
+    }
+
+    It 'Should map report Values using Schema field names' {
+        $response = [pscustomobject]@{
+            Schema = @(
+                [pscustomobject]@{ Column = 'PolicyName' }
+                [pscustomobject]@{ Column = 'PolicyStatus' }
+                [pscustomobject]@{ Column = 'UnifiedPolicyType' }
+            )
+            Values = @(
+                , @('Baseline [Prod]', 'Succeeded', 'Settings Catalog')
+            )
+        }
+
+        $result = ConvertFrom-InTUIReportResponse -Response $response -DefaultFields $defaultFields
+
+        $result | Should -HaveCount 1
+        $result[0].PolicyName | Should -Be 'Baseline [Prod]'
+        $result[0].PolicyStatus | Should -Be 'Succeeded'
+        $result[0].UnifiedPolicyType | Should -Be 'Settings Catalog'
+    }
+
+    It 'Should map report rows using default fields when Schema is absent' {
+        $response = [pscustomobject]@{
+            rows = @(
+                , @('device-1', 'DeviceManagementConfigurationPolicy', 'policy-1', 'Succeeded', 'user@example.com', 'user-1', '2026-05-05T00:00:00Z', 'Modern Policy', 'Settings Catalog')
+            )
+        }
+
+        $result = ConvertFrom-InTUIReportResponse -Response $response -DefaultFields $defaultFields
+
+        $result | Should -HaveCount 1
+        $result[0].PolicyName | Should -Be 'Modern Policy'
+        $result[0].UPN | Should -Be 'user@example.com'
+    }
+
+    It 'Should parse raw JSON report responses from Graph report actions' {
+        $response = @'
+{
+  "TotalRowCount": 1,
+  "Schema": [
+    { "Column": "IntuneDeviceId", "PropertyType": "String" },
+    { "Column": "PolicyBaseTypeName", "PropertyType": "String" },
+    { "Column": "PolicyId", "PropertyType": "String" },
+    { "Column": "PolicyName", "PropertyType": "String" },
+    { "Column": "PolicyStatus", "PropertyType": "Int32" },
+    { "Column": "PspdpuLastModifiedTimeUtc", "PropertyType": "DateTime" },
+    { "Column": "UnifiedPolicyType", "PropertyType": "String" },
+    { "Column": "UnifiedPolicyType_loc", "PropertyType": "String" },
+    { "Column": "UPN", "PropertyType": "String" },
+    { "Column": "UserId", "PropertyType": "String" }
+  ],
+  "Values": [
+    [
+      "device-1",
+      "DeviceManagementConfigurationPolicy",
+      "policy-1",
+      "[IHD] CISv4 - WIN - L2 - Turn off the Store application",
+      2,
+      "2026-05-02T20:58:48",
+      "SettingsCatalog",
+      "Settings Catalog",
+      "user@example.com",
+      "user-1"
+    ]
+  ]
+}
+'@
+
+        $result = ConvertFrom-InTUIReportResponse -Response $response -DefaultFields $defaultFields
+
+        $result | Should -HaveCount 1
+        $result[0].PolicyName | Should -Be '[IHD] CISv4 - WIN - L2 - Turn off the Store application'
+        $result[0].PolicyStatus | Should -Be 2
+        $result[0].UPN | Should -Be 'user@example.com'
+    }
+
+    It 'Should convert numeric Intune report policy status codes' {
+        ConvertTo-InTUIReportPolicyStatus -Status 1 | Should -Be 'NotApplicable'
+        ConvertTo-InTUIReportPolicyStatus -Status 2 | Should -Be 'Succeeded'
+        ConvertTo-InTUIReportPolicyStatus -Status 3 | Should -Be 'Failed'
+        ConvertTo-InTUIReportPolicyStatus -Status 4 | Should -Be 'Conflict'
+    }
+}
+
+Describe 'App Install Status Retrieval' {
+    BeforeAll {
+        $script:Connected = $true
+    }
+
+    It 'Should build device install statuses without using unsupported mobileApps deviceStatuses route' {
+        Mock Get-InTUIPagedResults -MockWith {
+            return @{
+                Results = @(
+                    [pscustomobject]@{
+                        id                 = 'device-1'
+                        deviceName         = 'WIN-01'
+                        userId             = 'user-1'
+                        userPrincipalName  = 'user@example.com'
+                        osVersion          = '10.0.26100'
+                        lastSyncDateTime   = '2026-05-06T12:00:00Z'
+                    }
+                )
+                TotalCount = 1
+            }
+        }
+
+        Mock Invoke-InTUIGraphRequest -MockWith {
+            param([string]$Uri)
+            $script:CapturedAppStatusUris += $Uri
+            return [pscustomobject]@{
+                mobileAppList = @(
+                    [pscustomobject]@{
+                        applicationId = 'app-1'
+                        displayName   = 'Google Chrome'
+                        installState  = 'installed'
+                    }
+                )
+            }
+        }
+
+        $script:CapturedAppStatusUris = @()
+
+        $result = Get-InTUIAppDeviceInstallStatus -AppId 'app-1' -AppName 'Google Chrome'
+
+        $result | Should -HaveCount 1
+        $result[0].deviceName | Should -Be 'WIN-01'
+        $result[0].installState | Should -Be 'installed'
+        $script:CapturedAppStatusUris | Should -Not -Contain '/deviceAppManagement/mobileApps/app-1/deviceStatuses'
+        $script:CapturedAppStatusUris[0] | Should -Be "/users('user-1')/mobileAppIntentAndStates('device-1')"
+    }
+
+    It 'Should retrieve user install statuses through the Intune report action' {
+        Mock Invoke-InTUIGraphRequest -MockWith {
+            param([string]$Uri, [string]$Method, [hashtable]$Body)
+            $script:CapturedUserStatusUri = $Uri
+            $script:CapturedUserStatusMethod = $Method
+            $script:CapturedUserStatusBody = $Body
+            return [pscustomobject]@{
+                Schema = @(
+                    [pscustomobject]@{ Column = 'UserId' }
+                    [pscustomobject]@{ Column = 'ApplicationId' }
+                    [pscustomobject]@{ Column = 'UserName' }
+                    [pscustomobject]@{ Column = 'UserPrincipalName' }
+                    [pscustomobject]@{ Column = 'InstalledCount' }
+                    [pscustomobject]@{ Column = 'FailedCount' }
+                    [pscustomobject]@{ Column = 'PendingInstallCount' }
+                    [pscustomobject]@{ Column = 'NotApplicableCount' }
+                    [pscustomobject]@{ Column = 'NotInstalledCount' }
+                )
+                Values = @(
+                    , @('user-1', 'app-1', 'Test User', 'user@example.com', 1, 0, 0, 0, 2)
+                )
+            }
+        }
+
+        $result = Get-InTUIAppUserInstallStatus -AppId 'app-1'
+
+        $result | Should -HaveCount 1
+        $result[0].UserPrincipalName | Should -Be 'user@example.com'
+        $result[0].InstalledCount | Should -Be 1
+        $script:CapturedUserStatusUri | Should -Be '/deviceManagement/reports/getUserInstallStatusReport'
+        $script:CapturedUserStatusMethod | Should -Be 'POST'
+        $script:CapturedUserStatusBody.filter | Should -Be "(ApplicationId eq 'app-1')"
+    }
+}
+
+Describe 'Show-InTUIMultiSelect' {
+    BeforeEach {
+        $script:HasArrowKeySupport = $true
+    }
+
+    It 'Should return the first choice when the arrow menu returns index zero' {
+        Mock Show-InTUIMenuArrowMulti -MockWith { return 0 }
+
+        $result = Show-InTUIMultiSelect -Title 'Select platforms' -Choices @('Windows', 'macOS')
+
+        $result | Should -HaveCount 1
+        $result[0] | Should -Be 'Windows'
+    }
+}
+
+Describe 'Show-InTUIHeader' {
+    BeforeEach {
+        $script:HeaderOutput = @()
+        Mock Write-Host -MockWith {
+            param($Object)
+            $script:HeaderOutput += [string]$Object
+        }
+    }
+
+    It 'Should support compact rendering for the dashboard shell' {
+        Show-InTUIHeader
+
+        $script:HeaderOutput[0] | Should -Match ([regex]::Escape([string][char]0x2500))
+        $script:HeaderOutput -join "`n" | Should -Match 'Intune Terminal User Interface'
+
+        $script:HeaderOutput = @()
+        Show-InTUIHeader -Compact
+
+        $script:HeaderOutput | Should -Not -Contain ''
+    }
+}
+
+Describe 'Strip-InTUIMarkup' {
+    It 'Should remove leftover nested style tags from menu labels' {
+        $label = '[grey]DC[/] [white]DC [[white]] Win - OIB[/] [grey]| Windows[/]'
+
+        Strip-InTUIMarkup -Text $label | Should -Be 'DC DC Win - OIB | Windows'
+    }
+
+    It 'Should preserve ordinary bracketed title text' {
+        $label = '[white]Baseline [[Prod]][/] [grey]| Windows[/]'
+
+        Strip-InTUIMarkup -Text $label | Should -Be 'Baseline [Prod] | Windows'
+    }
+}
+
+Describe 'Split-InTUIPlainTextByDisplayWidth' {
+    It 'Should return an empty segment for empty text' {
+        $result = @(Split-InTUIPlainTextByDisplayWidth -Text '' -Width 10)
+
+        $result | Should -HaveCount 1
+        $result[0] | Should -Be ''
+    }
+
+    It 'Should leave text unchanged when it already fits' {
+        $result = @(Split-InTUIPlainTextByDisplayWidth -Text 'short text' -Width 20)
+
+        $result | Should -HaveCount 1
+        $result[0] | Should -Be 'short text'
+    }
+
+    It 'Should prefer wrapping at word boundaries' {
+        $result = Split-InTUIPlainTextByDisplayWidth -Text 'alpha beta gamma delta' -Width 12
+
+        $result | Should -HaveCount 2
+        $result[0] | Should -Be 'alpha beta'
+        $result[1] | Should -Be 'gamma delta'
+    }
+
+    It 'Should split long tokens that have no spaces' {
+        $result = Split-InTUIPlainTextByDisplayWidth -Text 'abcdefghijklmnop' -Width 6
+
+        $result | Should -HaveCount 3
+        $result[0] | Should -Be 'abcdef'
+        $result[1] | Should -Be 'ghijkl'
+        $result[2] | Should -Be 'mnop'
+    }
+
+    It 'Should respect display width for wide characters' {
+        $result = Split-InTUIPlainTextByDisplayWidth -Text 'VM あいう Device' -Width 7
+
+        foreach ($line in $result) {
+            Measure-InTUIDisplayWidth -Text $line | Should -BeLessOrEqual 7
+        }
+    }
+}
+
+Describe 'Split-InTUIPanelContentLine' {
+    It 'Should return one line with display width when content fits' {
+        $result = Split-InTUIPanelContentLine -Line '[cyan]Short rule[/]' -Width 20
+        $plainText = $result[0].Text -replace "`e\[[0-9;]*m", ''
+
+        $result | Should -HaveCount 1
+        $plainText | Should -Be 'Short rule'
+        $result[0].DisplayWidth | Should -Be 10
+    }
+
+    It 'Should wrap long dynamic membership rules instead of truncating them' {
+        $rule = '(device.deviceModel -contains "Virtual") or (device.deviceModel -contains "Cloud PC") or (device.deviceManufacturer -contains "VMware")'
+
+        $result = Split-InTUIPanelContentLine -Line "[cyan]$rule[/]" -Width 48
+
+        $plainLines = $result | ForEach-Object { $_.Text -replace "`e\[[0-9;]*m", '' }
+        $plainText = $plainLines -join ' '
+
+        $plainText | Should -Be $rule
+        $plainText | Should -Not -Match '\.\.\.'
+        @($result).Count | Should -BeGreaterThan 1
+        foreach ($line in $result) {
+            $line.DisplayWidth | Should -BeLessOrEqual 48
+        }
+    }
+
+    It 'Should preserve a single enclosing style across wrapped lines' {
+        $result = Split-InTUIPanelContentLine -Line '[cyan]alpha beta gamma delta[/]' -Width 10
+        $plainLines = $result | ForEach-Object { $_.Text -replace "`e\[[0-9;]*m", '' }
+
+        $plainLines | Should -HaveCount 3
+        $plainLines[0] | Should -Be 'alpha beta'
+        $plainLines[1] | Should -Be 'gamma'
+        $plainLines[2] | Should -Be 'delta'
+        foreach ($line in $result) {
+            $line.DisplayWidth | Should -BeLessOrEqual 10
+        }
+    }
+}
+
+Describe 'Render-InTUIPanel' {
+    BeforeEach {
+        $script:PanelOutput = @()
+        Mock Get-InTUIConsoleInnerWidth -MockWith { return 28 }
+        Mock Write-Host -MockWith {
+            param($Object)
+            $script:PanelOutput += $Object
+        }
+    }
+
+    It 'Should render long content on multiple panel rows without ellipsis' {
+        Render-InTUIPanel -Title 'Rule' -Content '[cyan]alpha beta gamma delta epsilon zeta[/]' -BorderColor Cyan
+
+        $contentRows = $script:PanelOutput | Where-Object { $_ -match 'alpha|gamma|epsilon' }
+        $joinedOutput = $script:PanelOutput -join "`n"
+
+        @($contentRows).Count | Should -BeGreaterThan 1
+        $joinedOutput | Should -Match 'alpha'
+        $joinedOutput | Should -Match 'zeta'
+        $joinedOutput | Should -Not -Match '\.\.\.'
+    }
+}
+
+Describe 'Dashboard Overview Content' {
+    It 'Should consolidate inventory and compliance summaries into one content block' {
+        $dashboardData = @{
+            DeviceCount       = 3
+            AppCount          = 2
+            UserCount         = 3
+            GroupCount        = 59
+            CompliantCount    = 1
+            NoncompliantCount = 2
+            InGracePeriod     = 0
+            ErrorCount        = 0
+        }
+
+        $content = New-InTUIDashboardOverviewContent -DashboardData $dashboardData -CompliancePercent 33.3 -ComplianceBar '[green]====[/]'
+
+        $content | Should -Match '\[bold\]Inventory\[/\]'
+        $content | Should -Match '\[white\]3\[/\] devices'
+        $content | Should -Match '\[white\]2\[/\] apps'
+        $content | Should -Match '\[white\]3\[/\] users'
+        $content | Should -Match '\[white\]59\[/\] groups'
+        $content | Should -Match '\[bold\]Compliance Status\[/\]'
+        $content | Should -Match '33\.3%'
+        $content | Should -Not -Match 'Managed apps across all platforms'
+        $content | Should -Not -Match 'Azure AD directory users'
+        $content | Should -Not -Match 'Security and distribution groups'
+        ($content -split "`n")[0] | Should -Match '\[bold\]Inventory\[/\]'
+        ($content -split "`n")[-1] | Should -Match '\[red\]x\[/\] Error'
+    }
+
+    It 'Should clear the loading spinner before rendering the dashboard panel' {
+        $script:DashboardLoadingClearOnComplete = $false
+        Mock Show-InTUILoading -MockWith {
+            param($Title, $ScriptBlock, [switch]$ClearOnComplete)
+            $script:DashboardLoadingClearOnComplete = $ClearOnComplete.IsPresent
+            return @{
+                DeviceCount       = 3
+                AppCount          = 2
+                UserCount         = 3
+                GroupCount        = 59
+                CompliantCount    = 1
+                NoncompliantCount = 2
+                InGracePeriod     = 0
+                ErrorCount        = 0
+            }
+        }
+        Mock Show-InTUIPanel -MockWith { }
+
+        Show-InTUIDashboard
+
+        $script:DashboardLoadingClearOnComplete | Should -BeTrue
+    }
+}
+
+Describe 'Global Search Layout' {
+    BeforeEach {
+        $script:GlobalSearchHeaderCompact = $false
+        $script:GlobalSearchLoadingClearOnComplete = $false
+        $script:GlobalSearchInputCalls = 0
+        Mock Clear-Host -MockWith { }
+        Mock Show-InTUIHeader -MockWith {
+            param($Subtitle, [switch]$Compact)
+            $script:GlobalSearchHeaderCompact = $script:GlobalSearchHeaderCompact -or $Compact.IsPresent
+        }
+        Mock Show-InTUIBreadcrumb -MockWith { }
+        Mock Write-InTUIText -MockWith { }
+        Mock Show-InTUIWarning -MockWith { }
+        Mock Read-InTUIKey -MockWith { }
+        Mock Show-InTUILoading -MockWith {
+            param($Title, $ScriptBlock, [switch]$ClearOnComplete)
+            $script:GlobalSearchLoadingClearOnComplete = $ClearOnComplete.IsPresent
+            return @{
+                Devices = @()
+                Apps    = @()
+                Users   = @()
+                Groups  = @()
+            }
+        }
+    }
+
+    It 'Should use compact header spacing and clear loading status rows' {
+        Mock Read-InTUITextInput -MockWith {
+            $script:GlobalSearchInputCalls++
+            if ($script:GlobalSearchInputCalls -eq 1) { return 'entra' }
+            return ''
+        }
+
+        Invoke-InTUIGlobalSearch
+
+        $script:GlobalSearchHeaderCompact | Should -BeTrue
+        $script:GlobalSearchLoadingClearOnComplete | Should -BeTrue
+    }
+}
+
+Describe 'Mobile App Assignment Request Body' {
+    BeforeAll {
+        $script:Connected = $true
+    }
+
+    It 'Should preserve existing assignments when adding a new assignment' {
+        Mock Invoke-InTUIGraphRequest -MockWith {
+            return [pscustomobject]@{
+                value = @(
+                    [pscustomobject]@{
+                        id       = 'assignment-1'
+                        intent   = 'available'
+                        target   = [pscustomobject]@{
+                            '@odata.type' = '#microsoft.graph.allLicensedUsersAssignmentTarget'
+                        }
+                        settings = [pscustomobject]@{
+                            '@odata.type'                  = '#microsoft.graph.win32LobAppAssignmentSettings'
+                            notifications                  = 'showAll'
+                            installTimeSettings            = $null
+                            restartSettings                = $null
+                            deliveryOptimizationPriority   = 'foreground'
+                        }
+                        source   = 'direct'
+                        sourceId = 'source-1'
+                    }
+                )
+            }
+        }
+
+        $newAssignment = @{
+            '@odata.type' = '#microsoft.graph.mobileAppAssignment'
+            intent        = 'available'
+            target        = @{
+                '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget'
+            }
+            settings      = $null
+        }
+
+        $body = New-InTUIMobileAppAssignmentRequestBody -AppId 'app-1' -Assignment $newAssignment
+
+        $body.mobileAppAssignments | Should -HaveCount 2
+        $body.mobileAppAssignments[0].target.'@odata.type' | Should -Be '#microsoft.graph.allLicensedUsersAssignmentTarget'
+        $body.mobileAppAssignments[0].settings.notifications | Should -Be 'showAll'
+        $body.mobileAppAssignments[0].Contains('id') | Should -BeFalse
+        $body.mobileAppAssignments[1].target.'@odata.type' | Should -Be '#microsoft.graph.allDevicesAssignmentTarget'
+    }
+
+    It 'Should not duplicate an existing assignment for the same target and intent' {
+        Mock Invoke-InTUIGraphRequest -MockWith {
+            return [pscustomobject]@{
+                value = @(
+                    [pscustomobject]@{
+                        intent = 'available'
+                        target = [pscustomobject]@{
+                            '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget'
+                        }
+                        settings = $null
+                    }
+                )
+            }
+        }
+
+        $newAssignment = @{
+            '@odata.type' = '#microsoft.graph.mobileAppAssignment'
+            intent        = 'available'
+            target        = @{
+                '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget'
+            }
+            settings      = $null
+        }
+
+        $body = New-InTUIMobileAppAssignmentRequestBody -AppId 'app-1' -Assignment $newAssignment
+
+        $body.mobileAppAssignments | Should -HaveCount 1
+        $body.mobileAppAssignments[0].target.'@odata.type' | Should -Be '#microsoft.graph.allDevicesAssignmentTarget'
+    }
+
+    It 'Should return null when existing assignments cannot be loaded' {
+        Mock Invoke-InTUIGraphRequest -MockWith { return $null }
+
+        $newAssignment = @{
+            '@odata.type' = '#microsoft.graph.mobileAppAssignment'
+            intent        = 'available'
+            target        = @{
+                '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget'
+            }
+            settings      = $null
+        }
+
+        $body = New-InTUIMobileAppAssignmentRequestBody -AppId 'app-1' -Assignment $newAssignment
+
+        $body | Should -BeNullOrEmpty
+    }
 }
 
 Describe 'Cloud Environment Definitions' {
@@ -423,6 +1011,160 @@ Describe 'Get-InTUIGroupType' {
     }
 }
 
+Describe 'Group List Query Parameters' {
+    It 'Should not request server-side sorting for security group filters' {
+        $params = New-InTUIGroupListQueryParams -TypeFilter 'Security'
+
+        $params.Filter | Should -Be 'securityEnabled eq true and mailEnabled eq false'
+        $params.Headers['ConsistencyLevel'] | Should -Be 'eventual'
+        $params.ContainsKey('OrderBy') | Should -BeFalse
+    }
+
+    It 'Should not request server-side sorting for Microsoft 365 group filters' {
+        $params = New-InTUIGroupListQueryParams -TypeFilter 'Microsoft365'
+
+        $params.Filter | Should -Be "groupTypes/any(g:g eq 'Unified')"
+        $params.Headers['ConsistencyLevel'] | Should -Be 'eventual'
+        $params.ContainsKey('OrderBy') | Should -BeFalse
+    }
+
+    It 'Should keep server-side sorting for unfiltered group lists' {
+        $params = New-InTUIGroupListQueryParams
+
+        $params.OrderBy | Should -Be 'displayName'
+        $params.ContainsKey('Filter') | Should -BeFalse
+    }
+
+    It 'Should not request server-side sorting for group searches' {
+        $params = New-InTUIGroupListQueryParams -SearchTerm 'micro'
+
+        $params.Search | Should -Be '"displayName:micro" OR "mail:micro"'
+        $params.PageSize | Should -Be 100
+        $params.IncludeCount | Should -BeTrue
+        $params.Headers['ConsistencyLevel'] | Should -Be 'eventual'
+        $params.ContainsKey('Filter') | Should -BeFalse
+        $params.ContainsKey('OrderBy') | Should -BeFalse
+    }
+}
+
+Describe 'Compliance Policy List Query Parameters' {
+    It 'Should not request unsupported server-side filtering for searches' {
+        $params = New-InTUICompliancePolicyListQueryParams -SearchTerm 'OIB'
+
+        $params.Uri | Should -Be '/deviceManagement/deviceCompliancePolicies'
+        $params.Beta | Should -BeTrue
+        $params.PageSize | Should -Be 200
+        $params.ContainsKey('Filter') | Should -BeFalse
+    }
+
+    It 'Should use the standard page size when not searching' {
+        $params = New-InTUICompliancePolicyListQueryParams
+
+        $params.PageSize | Should -Be 25
+        $params.ContainsKey('Filter') | Should -BeFalse
+    }
+}
+
+Describe 'Get-InTUIFilteredCompliancePolicy' {
+    BeforeAll {
+        $script:CompliancePolicySamples = @(
+            [pscustomobject]@{
+                displayName   = 'Win - OIB - Compliance'
+                '@odata.type' = '#microsoft.graph.windows10CompliancePolicy'
+            }
+            [pscustomobject]@{
+                displayName   = 'macOS - Platform Security'
+                '@odata.type' = '#microsoft.graph.macOSCompliancePolicy'
+            }
+            [pscustomobject]@{
+                displayName   = 'Android Work Profile'
+                '@odata.type' = '#microsoft.graph.androidWorkProfileCompliancePolicy'
+            }
+        )
+    }
+
+    It 'Should filter searches by display name client-side' {
+        $result = Get-InTUIFilteredCompliancePolicy -Policy $script:CompliancePolicySamples -SearchTerm 'oib'
+
+        $result | Should -HaveCount 1
+        $result[0].displayName | Should -Be 'Win - OIB - Compliance'
+    }
+
+    It 'Should combine platform and search filters client-side' {
+        $result = Get-InTUIFilteredCompliancePolicy -Policy $script:CompliancePolicySamples -PlatformFilter 'macOS' -SearchTerm 'platform'
+
+        $result | Should -HaveCount 1
+        $result[0].displayName | Should -Be 'macOS - Platform Security'
+    }
+
+    It 'Should return no results when the search term does not match' {
+        $result = Get-InTUIFilteredCompliancePolicy -Policy $script:CompliancePolicySamples -SearchTerm 'missing'
+
+        $result | Should -HaveCount 0
+    }
+}
+
+Describe 'Sign-in Log Query Parameters' {
+    It 'Should request only a small recent sign-in log page' {
+        $referenceTime = [datetime]'2026-05-06T12:00:00Z'
+
+        $params = New-InTUISignInLogQueryParams -ReferenceTime $referenceTime
+
+        $params.Uri | Should -Be '/auditLogs/signIns'
+        $params.PageSize | Should -Be 10
+        $params.Select | Should -Be 'id,userDisplayName,userPrincipalName,appDisplayName,ipAddress,status,createdDateTime,conditionalAccessStatus'
+        $params.Filter | Should -Be 'createdDateTime ge 2026-05-05T12:00:00Z'
+    }
+
+    It 'Should combine the recent time window with failure filters' {
+        $referenceTime = [datetime]'2026-05-06T12:00:00Z'
+
+        $params = New-InTUISignInLogQueryParams -Filter 'status/errorCode ne 0' -ReferenceTime $referenceTime
+
+        $params.Filter | Should -Be 'createdDateTime ge 2026-05-05T12:00:00Z and (status/errorCode ne 0)'
+    }
+}
+
+Describe 'Autopilot Device List Query Parameters' {
+    It 'Should request a small Autopilot device page with only list fields' {
+        $params = New-InTUIAutopilotDeviceListQueryParams
+
+        $params.Uri | Should -Be '/deviceManagement/windowsAutopilotDeviceIdentities'
+        $params.Beta | Should -BeTrue
+        $params.PageSize | Should -Be 10
+        $params.Select | Should -Be 'id,serialNumber,model,groupTag,enrollmentState,lastContactedDateTime'
+    }
+
+    It 'Should detect Graph errors from the Autopilot device list endpoint' {
+        $errorInfo = [pscustomobject]@{
+            StatusCode = 'InternalServerError'
+            Uri        = 'https://graph.microsoft.com/beta/deviceManagement/windowsAutopilotDeviceIdentities?$top=10'
+        }
+
+        Test-InTUIAutopilotDeviceListError -ErrorInfo $errorInfo | Should -BeTrue
+    }
+}
+
+Describe 'BitLocker Recovery Key Permissions' {
+    It 'Should detect Forbidden errors from the BitLocker recovery keys endpoint' {
+        $errorInfo = [pscustomobject]@{
+            StatusCode = 'Forbidden'
+            Uri        = 'https://graph.microsoft.com/v1.0/informationProtection/bitlocker/recoveryKeys?$filter=deviceId eq ''device-1'''
+        }
+
+        Test-InTUIBitLockerPermissionError -ErrorInfo $errorInfo | Should -BeTrue
+    }
+
+    It 'Should not treat unrelated Forbidden errors as BitLocker permission errors' {
+        $errorInfo = [pscustomobject]@{
+            StatusCode = 'Forbidden'
+            Uri        = 'https://graph.microsoft.com/v1.0/users'
+        }
+
+        Test-InTUIBitLockerPermissionError -ErrorInfo $errorInfo | Should -BeFalse
+    }
+}
+
 Describe 'Logging Functions' {
     Describe 'Initialize-InTUILog' {
         BeforeEach {
@@ -764,6 +1506,31 @@ Describe 'Connect-InTUIGraph Parameter Validation' {
         $scopeParam | Should -Not -BeNullOrEmpty
     }
 
+    It 'Should request BitLocker recovery key scopes by default' {
+        Mock Connect-MgGraph {
+            param($Scopes, $NoWelcome, $Environment, $TenantId)
+            $script:CapturedScopes = $Scopes
+        }
+        Mock Get-MgContext { return @{ TenantId = 'test'; Account = 'test@test.com' } }
+
+        Connect-InTUIGraph -Environment 'Global'
+
+        $script:CapturedScopes | Should -Contain 'BitlockerKey.ReadBasic.All'
+        $script:CapturedScopes | Should -Contain 'BitlockerKey.Read.All'
+    }
+
+    It 'Should request Autopilot service configuration scope by default' {
+        Mock Connect-MgGraph {
+            param($Scopes, $NoWelcome, $Environment, $TenantId)
+            $script:CapturedScopes = $Scopes
+        }
+        Mock Get-MgContext { return @{ TenantId = 'test'; Account = 'test@test.com' } }
+
+        Connect-InTUIGraph -Environment 'Global'
+
+        $script:CapturedScopes | Should -Contain 'DeviceManagementServiceConfig.Read.All'
+    }
+
     It 'Should have TenantId parameter' {
         $cmd = Get-Command Connect-InTUIGraph
         $cmd.Parameters.ContainsKey('TenantId') | Should -BeTrue
@@ -983,6 +1750,19 @@ Describe 'Get-InTUIPagedResults Query Building' {
 
         Get-InTUIPagedResults -Uri '/users' -Search 'john'
         $script:CapturedUri | Should -BeLike '*$search="john"*'
+    }
+
+    It 'Should build URI with quoted search expressions without double wrapping' {
+        Mock Invoke-MgGraphRequest -MockWith {
+            param($Uri)
+            $script:CapturedUri = $Uri
+            return @{ value = @() }
+        }
+
+        Get-InTUIPagedResults -Uri '/groups' -Search '"displayName:micro" OR "mail:micro"' -IncludeCount
+        $script:CapturedUri | Should -BeLike '*$search="displayName:micro" OR "mail:micro"*'
+        $script:CapturedUri | Should -BeLike '*$count=true*'
+        $script:CapturedUri | Should -Not -BeLike '*$search=""displayName*'
     }
 
     It 'Should build URI with expand parameter' {

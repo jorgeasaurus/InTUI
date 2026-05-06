@@ -1,3 +1,28 @@
+function New-InTUIDashboardOverviewContent {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$DashboardData,
+
+        [Parameter(Mandatory)]
+        [double]$CompliancePercent,
+
+        [Parameter(Mandatory)]
+        [string]$ComplianceBar
+    )
+
+    return @(
+        '  [bold]Inventory[/]'
+        "  [blue]>[/] [white]$($DashboardData.DeviceCount)[/] devices    [green]>[/] [white]$($DashboardData.AppCount)[/] apps    [yellow]>[/] [white]$($DashboardData.UserCount)[/] users    [cyan]>[/] [white]$($DashboardData.GroupCount)[/] groups"
+        '  [grey]Managed devices, apps, users, and groups[/]'
+        ''
+        '  [bold]Compliance Status[/]'
+        "  $ComplianceBar [white]$CompliancePercent%[/]"
+        ''
+        "  [green]+[/] Compliant [white]$($DashboardData.CompliantCount)[/]   [red]x[/] Non-compliant [white]$($DashboardData.NoncompliantCount)[/]   [yellow]![/] Grace Period [white]$($DashboardData.InGracePeriod)[/]   [red]x[/] Error [white]$($DashboardData.ErrorCount)[/]"
+    ) -join "`n"
+}
+
 function Show-InTUIDashboard {
     <#
     .SYNOPSIS
@@ -8,7 +33,7 @@ function Show-InTUIDashboard {
 
     Write-InTUILog -Message "Loading dashboard data"
 
-    $dashData = Show-InTUILoading -Title "[blue]Loading dashboard data...[/]" -ScriptBlock {
+    $dashData = Show-InTUILoading -Title "[blue]Loading dashboard data...[/]" -ClearOnComplete -ScriptBlock {
         $countHeaders = @{ ConsistencyLevel = 'eventual' }
         $devices = Invoke-InTUIGraphRequest -Uri '/deviceManagement/managedDevices?$top=1&$select=id&$count=true' -Beta -Headers $countHeaders
         $users = Invoke-InTUIGraphRequest -Uri '/users?$top=1&$select=id&$count=true' -Headers $countHeaders
@@ -49,50 +74,8 @@ function Show-InTUIDashboard {
     $compliancePercent = if ($totalDevices -gt 0) { [Math]::Round(([int]$dashData.CompliantCount / $totalDevices) * 100, 1) } else { 0 }
     $complianceBar = Get-InTUIProgressBar -Percentage $compliancePercent -Width 25
 
-    # Device panel with enhanced visuals
-    $deviceContent = @"
-  [white]$($dashData.DeviceCount)[/] [grey]managed devices[/]
-
-  [bold]Compliance Status[/]
-  $complianceBar [white]$compliancePercent%[/]
-
-  [green]+[/] Compliant       [white]$($dashData.CompliantCount)[/]
-  [red]x[/] Non-compliant   [white]$($dashData.NoncompliantCount)[/]
-  [yellow]![/] Grace Period    [white]$($dashData.InGracePeriod)[/]
-  [red]x[/] Error           [white]$($dashData.ErrorCount)[/]
-"@
-    Show-InTUIPanel -Title "[blue]Devices[/]" -Content $deviceContent -BorderColor Blue
-
-    # App panel
-    $appContent = @"
-  [white]$($dashData.AppCount)[/] [grey]applications[/]
-
-  [grey]Managed apps across all platforms[/]
-"@
-    Show-InTUIPanel -Title "[green]Apps[/]" -Content $appContent -BorderColor Green
-
-    # User panel
-    $userContent = @"
-  [white]$($dashData.UserCount)[/] [grey]users[/]
-
-  [grey]Azure AD directory users[/]
-"@
-    Show-InTUIPanel -Title "[yellow]Users[/]" -Content $userContent -BorderColor Yellow
-
-    # Group panel
-    $groupContent = @"
-  [white]$($dashData.GroupCount)[/] [grey]groups[/]
-
-  [grey]Security and distribution groups[/]
-"@
-    Show-InTUIPanel -Title "[cyan]Groups[/]" -Content $groupContent -BorderColor Cyan
-
-    # Quick stats footer
-    $statsWidth = Get-InTUIConsoleInnerWidth
-    Write-InTUIText ""
-    Write-InTUIText "  [grey]$(([string][char]0x2500) * $statsWidth)[/]"
-    Write-InTUIText "  [grey]Quick Stats:[/] [blue]>[/] [white]$($dashData.DeviceCount)[/] devices  [green]>[/] [white]$($dashData.AppCount)[/] apps  [yellow]>[/] [white]$($dashData.UserCount)[/] users  [cyan]>[/] [white]$($dashData.GroupCount)[/] groups"
-    Write-InTUIText ""
+    $overviewContent = New-InTUIDashboardOverviewContent -DashboardData $dashData -CompliancePercent $compliancePercent -ComplianceBar $complianceBar
+    Show-InTUIPanel -Title "[blue]Overview[/]" -Content $overviewContent -BorderColor Blue
 }
 
 function Start-InTUIAutoRefresh {

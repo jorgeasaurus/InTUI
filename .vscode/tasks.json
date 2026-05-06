@@ -74,7 +74,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Module: Launch InTUI",
+            "label": "Launch InTUI",
             "type": "shell",
             "command": "pwsh",
             "args": ["-NoProfile", "-Command", "Import-Module \"${workspaceFolder}/InTUI.psd1\" -Force; Start-InTUI"],

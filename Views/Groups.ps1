@@ -85,6 +85,60 @@ function Show-InTUIGroupsView {
     }
 }
 
+function New-InTUIGroupListQueryParams {
+    <#
+    .SYNOPSIS
+        Builds Graph query parameters for the group list view.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$TypeFilter,
+
+        [Parameter()]
+        [string]$SearchTerm
+    )
+
+    $params = @{
+        Uri      = '/groups'
+        PageSize = 25
+        Select   = 'id,displayName,description,groupTypes,mail,mailEnabled,securityEnabled,membershipRule,createdDateTime'
+    }
+
+    $filter = @()
+    if ($TypeFilter) {
+        switch ($TypeFilter) {
+            'Security' {
+                $filter += "securityEnabled eq true and mailEnabled eq false"
+            }
+            'Microsoft365' {
+                $filter += "groupTypes/any(g:g eq 'Unified')"
+            }
+            'Dynamic' {
+                $filter += "groupTypes/any(g:g eq 'DynamicMembership')"
+            }
+        }
+    }
+    if ($SearchTerm) {
+        $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
+        $params['Search'] = "`"displayName:$safe`" OR `"mail:$safe`""
+        $params['PageSize'] = 100
+        $params['IncludeCount'] = $true
+        $params['Headers'] = @{ 'ConsistencyLevel' = 'eventual' }
+    }
+
+    if ($filter.Count -gt 0) {
+        $params['Filter'] = $filter -join ' and '
+        $params['Headers'] = @{ 'ConsistencyLevel' = 'eventual' }
+    }
+
+    if (-not $TypeFilter -and -not $SearchTerm) {
+        $params['OrderBy'] = 'displayName'
+    }
+
+    return $params
+}
+
 function Show-InTUIGroupList {
     <#
     .SYNOPSIS
@@ -111,35 +165,7 @@ function Show-InTUIGroupList {
         else { $breadcrumb += 'All Groups' }
         Show-InTUIBreadcrumb -Path $breadcrumb
 
-        $params = @{
-            Uri      = '/groups'
-            PageSize = 25
-            Select   = 'id,displayName,description,groupTypes,mailEnabled,securityEnabled,membershipRule,createdDateTime'
-            OrderBy  = 'displayName'
-        }
-
-        $filter = @()
-        if ($TypeFilter) {
-            switch ($TypeFilter) {
-                'Security' {
-                    $filter += "securityEnabled eq true and mailEnabled eq false"
-                }
-                'Microsoft365' {
-                    $filter += "groupTypes/any(g:g eq 'Unified')"
-                }
-                'Dynamic' {
-                    $filter += "groupTypes/any(g:g eq 'DynamicMembership')"
-                }
-            }
-        }
-        if ($SearchTerm) {
-            $safe = ConvertTo-InTUISafeFilterValue -Value $SearchTerm
-            $filter += "startswith(displayName,'$safe')"
-        }
-
-        if ($filter.Count -gt 0) {
-            $params['Filter'] = $filter -join ' and '
-        }
+        $params = New-InTUIGroupListQueryParams -TypeFilter $TypeFilter -SearchTerm $SearchTerm
 
         $groups = Show-InTUILoading -Title "[cyan]Loading groups...[/]" -ScriptBlock {
             Get-InTUIPagedResults @params
@@ -154,7 +180,6 @@ function Show-InTUIGroupList {
 
         $groupChoices = @()
         foreach ($group in $groups.Results) {
-            $groupType = Get-InTUIGroupType -Group $group
             $desc = if ($group.description) {
                 $truncated = $group.description
                 if ((Measure-InTUIDisplayWidth -Text $truncated) -gt 40) { $truncated = $truncated.Substring(0, 40) + '...' }
@@ -162,7 +187,7 @@ function Show-InTUIGroupList {
             }
             else { 'No description' }
 
-            $displayName = "$groupType [white]$(ConvertTo-InTUISafeMarkup -Text $group.displayName)[/] [grey]| $desc[/]"
+            $displayName = "[white]$(ConvertTo-InTUISafeMarkup -Text $group.displayName)[/] [grey]| $desc[/]"
             $groupChoices += $displayName
         }
 

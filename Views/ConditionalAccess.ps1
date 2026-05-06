@@ -495,16 +495,7 @@ function Show-InTUISignInLogs {
         }
     }
 
-    $params = @{
-        Uri      = '/auditLogs/signIns'
-        Beta     = $false
-        PageSize = 25
-        Select   = 'id,userDisplayName,userPrincipalName,appDisplayName,ipAddress,status,createdDateTime,conditionalAccessStatus'
-    }
-
-    if ($filter) {
-        $params['Filter'] = $filter
-    }
+    $params = New-InTUISignInLogQueryParams -Filter $filter
 
     $signIns = Show-InTUILoading -Title "[DeepSkyBlue1]Loading sign-in logs...[/]" -ScriptBlock {
         Get-InTUIPagedResults @params
@@ -550,4 +541,36 @@ function Show-InTUISignInLogs {
     Show-InTUITable -Title "Sign-in Logs ($filterSelection)" -Columns @('User', 'App', 'IP', 'Status', 'CA Status', 'Time') -Rows $rows
 
     Read-InTUIKey
+}
+
+function New-InTUISignInLogQueryParams {
+    <#
+    .SYNOPSIS
+        Builds a bounded sign-in log query to keep audit log loading responsive.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$Filter,
+
+        [Parameter()]
+        [int]$HoursBack = 24,
+
+        [Parameter()]
+        [datetime]$ReferenceTime = [DateTime]::UtcNow
+    )
+
+    $cutoff = $ReferenceTime.ToUniversalTime().AddHours(-1 * $HoursBack).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $filters = @("createdDateTime ge $cutoff")
+    if ($Filter) {
+        $filters += "($Filter)"
+    }
+
+    return @{
+        Uri      = '/auditLogs/signIns'
+        Beta     = $false
+        PageSize = 10
+        Select   = 'id,userDisplayName,userPrincipalName,appDisplayName,ipAddress,status,createdDateTime,conditionalAccessStatus'
+        Filter   = $filters -join ' and '
+    }
 }

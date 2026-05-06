@@ -243,6 +243,12 @@ Describe 'Multi-Select Menu' -Skip:(-not $script:TmuxAvailable) {
         $snap | Should -Match ([regex]::Escape([string][char]0x2611))
     }
 
+    It 'selects the first item on Space then Enter' {
+        Send-TUIKey $script:session @('Space', 'Enter')
+        $snap = Wait-TUIContent $script:session 'SELECTED:'
+        $snap | Should -Match 'SELECTED:Windows'
+    }
+
     It 'selects multiple and returns them on Enter' {
         Send-TUIKey $script:session @('Space', 'Down', 'Down', 'Space', 'Enter')
         $snap = Wait-TUIContent $script:session 'SELECTED:'
