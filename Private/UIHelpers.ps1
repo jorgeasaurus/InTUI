@@ -32,6 +32,25 @@
     return ($AnchorTop - $scrollAmount)
 }
 
+function Resolve-InTUIConsoleWindowWidth {
+    <#
+    .SYNOPSIS
+        Returns a usable console window width for header rendering.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter()]
+        [int]$Width = 80
+    )
+
+    if ($Width -lt 1) {
+        return 80
+    }
+
+    return $Width
+}
+
 function Show-InTUIHeader {
     <#
     .SYNOPSIS
@@ -48,7 +67,7 @@ function Show-InTUIHeader {
     $palette = Get-InTUIColorPalette
     $reset = $palette.Reset
 
-    $consoleWidth = try { [Console]::WindowWidth } catch { 80 }
+    $consoleWidth = try { Resolve-InTUIConsoleWindowWidth -Width ([Console]::WindowWidth) } catch { 80 }
 
     # Helper to center a plain string and return the left padding count
     $centerPad = {
@@ -57,7 +76,7 @@ function Show-InTUIHeader {
     }
 
     # Gradient-decorated top border
-    $borderWidth = [Math]::Min(60, $consoleWidth - 4)
+    $borderWidth = [Math]::Max(1, [Math]::Min(60, $consoleWidth - 4))
     $gradientTop = Get-InTUIGradientLine -Character ([char]0x2500) -Width $borderWidth
     Write-Host "$(' ' * (& $centerPad $borderWidth))$gradientTop"
 

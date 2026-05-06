@@ -349,6 +349,23 @@ Describe 'Show-InTUIHeader' {
 
         $script:HeaderOutput | Should -Not -Contain ''
     }
+
+    It 'Should render when console width resolves to zero' {
+        Mock Resolve-InTUIConsoleWindowWidth -MockWith { return 0 }
+
+        { Show-InTUIHeader -Compact } | Should -Not -Throw
+        $script:HeaderOutput[0] | Should -Match ([regex]::Escape([string][char]0x2500))
+    }
+}
+
+Describe 'Resolve-InTUIConsoleWindowWidth' {
+    It 'Should use default width for non-interactive zero-width consoles' {
+        Resolve-InTUIConsoleWindowWidth -Width 0 | Should -Be 80
+    }
+
+    It 'Should preserve valid console widths' {
+        Resolve-InTUIConsoleWindowWidth -Width 120 | Should -Be 120
+    }
 }
 
 Describe 'Strip-InTUIMarkup' {
