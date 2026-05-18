@@ -3,3 +3,4 @@ build/
 .secrets.DS_Store
 .secrets
 .DS_Store
+tasks/

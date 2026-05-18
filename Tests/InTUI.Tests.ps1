@@ -69,6 +69,7 @@ BeforeAll {
     . "$ProjectRoot/Private/GraphHelpers.ps1"
     . "$ProjectRoot/Private/ReportHelpers.ps1"
     . "$ProjectRoot/Private/AppIntentHelpers.ps1"
+    . "$ProjectRoot/Private/PimRoleActivation.ps1"
     . "$ProjectRoot/Private/GlobalSearch.ps1"
 
     # Functions from Views that contain pure logic
@@ -322,10 +323,20 @@ Describe 'Show-InTUIMultiSelect' {
     It 'Should return the first choice when the arrow menu returns index zero' {
         Mock Show-InTUIMenuArrowMulti -MockWith { return 0 }
 
-        $result = Show-InTUIMultiSelect -Title 'Select platforms' -Choices @('Windows', 'macOS')
+        $result = @(Show-InTUIMultiSelect -Title 'Select platforms' -Choices @('Windows', 'macOS'))
 
         $result | Should -HaveCount 1
         $result[0] | Should -Be 'Windows'
+    }
+
+    It 'Should return each selected choice as a separate pipeline item' {
+        Mock Show-InTUIMenuArrowMulti { return @(0, 2) }
+
+        $result = @(Show-InTUIMultiSelect -Title 'Select platforms' -Choices @('Windows', 'macOS', 'iOS'))
+
+        $result | Should -HaveCount 2
+        $result[0] | Should -Be 'Windows'
+        $result[1] | Should -Be 'iOS'
     }
 }
 
@@ -1501,6 +1512,45 @@ Describe 'Invoke-InTUIGraphRequest URI Construction' {
         $script:CapturedContentType | Should -Be 'application/json'
         $script:CapturedBody | Should -BeLike '*displayName*'
     }
+
+    It 'Should collect all pages when -All is specified' {
+        $script:GraphBaseUrl = 'https://graph.microsoft.com/v1.0'
+        $script:PageCallCount = 0
+
+        Mock Invoke-MgGraphRequest -MockWith {
+            $script:PageCallCount++
+            if ($script:PageCallCount -eq 1) {
+                return @{
+                    value            = @(@{ id = '1' })
+                    '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/users?$skiptoken=next'
+                }
+            }
+
+            return @{ value = @(@{ id = '2' }) }
+        }
+
+        $result = Invoke-InTUIGraphRequest -Uri '/users' -All
+
+        $result | Should -HaveCount 2
+        $result[0].id | Should -Be '1'
+        $result[1].id | Should -Be '2'
+    }
+
+    It 'Should stop pagination after MaxPages' {
+        $script:GraphBaseUrl = 'https://graph.microsoft.com/v1.0'
+
+        Mock Invoke-MgGraphRequest -MockWith {
+            return @{
+                value            = @(@{ id = '1' })
+                '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/users?$skiptoken=loop'
+            }
+        }
+
+        $result = Invoke-InTUIGraphRequest -Uri '/users' -All -MaxPages 2
+
+        $result | Should -BeNullOrEmpty
+        $script:LastGraphError.Message | Should -Match 'pagination exceeded max page limit'
+    }
 }
 
 Describe 'Connect-InTUIGraph Parameter Validation' {
@@ -1940,5 +1990,437 @@ Describe 'Logging File Placement' {
         $lastLine = $content[-1]
         # Alpha should come before Middle which should come before Zebra
         $lastLine | Should -Match 'Alpha=a.*Middle=m.*Zebra=z'
+    }
+}
+
+Describe 'PIM Role Activation Helpers' {
+    BeforeEach {
+        $script:Connected = $true
+        $script:LastGraphError = $null
+        $script:LogFilePath = $null
+    }
+
+    It 'Should return PIM connection scopes without duplicates' {
+        $scopes = Get-InTUIPimConnectionScopes
+
+        $scopes | Should -Contain 'RoleEligibilitySchedule.Read.Directory'
+        $scopes | Should -Contain 'RoleAssignmentSchedule.ReadWrite.Directory'
+        $scopes | Should -Contain 'RoleManagement.Read.Directory'
+        $scopes.Count | Should -Be (($scopes | Select-Object -Unique).Count)
+    }
+
+    It 'Should convert integer hours to Graph duration format' {
+        ConvertTo-InTUIPimDuration -Hours 2 | Should -Be 'PT2H'
+    }
+
+    It 'Should require a non-empty reason' {
+        Test-InTUIPimReason -Reason '  ' | Should -BeFalse
+        Test-InTUIPimReason -Reason 'INC12345' | Should -BeTrue
+    }
+
+    It 'Should redact long reason text for local logs' {
+        $reason = 'INC12345 investigating privileged access for endpoint incident'
+
+        $redacted = ConvertTo-InTUIPimRedactedReason -Reason $reason -PrefixLength 10
+
+        $redacted | Should -Be 'INC12345 i... [redacted]'
+    }
+
+    It 'Should build a stable role key from role definition and scope' {
+        $role = [pscustomobject]@{
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/administrativeUnits/au-1'
+            AppScopeId       = $null
+        }
+
+        Get-InTUIPimRoleKey -Role $role | Should -Be 'role-1|/administrativeUnits/au-1|'
+    }
+
+    It 'Should display tenant scope for empty or root directory scopes' {
+        Get-InTUIPimScopeLabel -DirectoryScopeId '/' | Should -Be 'Tenant'
+        Get-InTUIPimScopeLabel -DirectoryScopeId '' | Should -Be 'Tenant'
+    }
+
+    It 'Should parse eligible role schedule instances into role items' {
+        $schedule = [pscustomobject]@{
+            id               = 'eligibility-1'
+            principalId      = 'user-1'
+            roleDefinitionId = 'role-1'
+            directoryScopeId = '/'
+            appScopeId       = $null
+            roleDefinition   = [pscustomobject]@{ displayName = 'Global Reader' }
+        }
+
+        $role = ConvertTo-InTUIPimRoleItem -Schedule $schedule
+
+        $role.DisplayName | Should -Be 'Global Reader'
+        $role.PrincipalId | Should -Be 'user-1'
+        $role.RoleDefinitionId | Should -Be 'role-1'
+        $role.DirectoryScopeId | Should -Be '/'
+    }
+
+    It 'Should parse PascalCase PIM schedule objects into role items' {
+        $schedule = [pscustomobject]@{
+            Id               = 'eligibility-1'
+            PrincipalId      = 'user-1'
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/'
+            AppScopeId       = $null
+            RoleDefinition   = [pscustomobject]@{ DisplayName = 'Global Reader' }
+        }
+
+        $role = ConvertTo-InTUIPimRoleItem -Schedule $schedule
+
+        $role.DisplayName | Should -Be 'Global Reader'
+        $role.PrincipalId | Should -Be 'user-1'
+        $role.RoleDefinitionId | Should -Be 'role-1'
+        $role.DirectoryScopeId | Should -Be '/'
+    }
+
+    It 'Should parse dictionary-shaped PIM schedule rows into role items' {
+        $schedule = @{
+            id               = 'eligibility-1'
+            principalId      = 'user-1'
+            roleDefinitionId = 'role-1'
+            directoryScopeId = '/'
+            appScopeId       = $null
+            roleDefinition   = @{ displayName = 'Global Reader' }
+        }
+
+        $role = ConvertTo-InTUIPimRoleItem -Schedule $schedule
+
+        $role.DisplayName | Should -Be 'Global Reader'
+        $role.PrincipalId | Should -Be 'user-1'
+        $role.RoleDefinitionId | Should -Be 'role-1'
+        $role.DirectoryScopeId | Should -Be '/'
+    }
+
+    It 'Should resolve dictionary-shaped role definition names' {
+        $roles = @(
+            [pscustomobject]@{
+                DisplayName      = 'role-1'
+                RoleDefinitionId = 'role-1'
+            }
+        )
+        Mock Invoke-InTUIGraphRequest {
+            return @(
+                @{
+                    id          = 'role-1'
+                    displayName = 'Global Reader'
+                }
+            )
+        } -ParameterFilter { $Uri -like '*roleDefinitions*' }
+
+        $result = Set-InTUIPimRoleDisplayName -Roles $roles
+
+        $result[0].DisplayName | Should -Be 'Global Reader'
+    }
+
+    It 'Should parse PIM schedule values from AdditionalProperties' {
+        $schedule = [pscustomobject]@{
+            AdditionalProperties = @{
+                id               = 'eligibility-1'
+                principalId      = 'user-1'
+                roleDefinitionId = 'role-1'
+                directoryScopeId = '/'
+                roleDefinition   = @{ displayName = 'Global Reader' }
+            }
+        }
+
+        $role = ConvertTo-InTUIPimRoleItem -Schedule $schedule
+
+        $role.DisplayName | Should -Be 'Global Reader'
+        $role.PrincipalId | Should -Be 'user-1'
+        $role.RoleDefinitionId | Should -Be 'role-1'
+        $role.DirectoryScopeId | Should -Be '/'
+    }
+
+    It 'Should normalize raw PIM item collections through JSON when direct conversion fails' {
+        $items = @(
+            [pscustomobject]@{
+                AdditionalProperties = @{
+                    id               = 'eligibility-1'
+                    principalId      = 'user-1'
+                    roleDefinitionId = 'role-1'
+                    directoryScopeId = '/'
+                    roleDefinition   = @{ displayName = 'Global Reader' }
+                }
+            }
+        )
+
+        $roles = ConvertTo-InTUIPimRoleCollection -Items $items -Source 'Test'
+
+        $roles | Should -HaveCount 1
+        $roles[0].DisplayName | Should -Be 'Global Reader'
+    }
+
+    It 'Should ignore null PIM schedule items returned by Graph' {
+        Mock Invoke-InTUIGraphRequest {
+            return @(
+                $null,
+                [pscustomobject]@{
+                    id               = 'eligibility-1'
+                    principalId      = 'user-1'
+                    roleDefinitionId = 'role-1'
+                    directoryScopeId = '/'
+                    roleDefinition   = [pscustomobject]@{ displayName = 'Global Reader' }
+                }
+            )
+        }
+
+        $roles = Get-InTUIPimEligibleDirectoryRole
+
+        $roles | Should -HaveCount 1
+        $roles[0].DisplayName | Should -Be 'Global Reader'
+    }
+
+    It 'Should ignore PIM schedule items missing activation identifiers' {
+        Mock Invoke-InTUIGraphRequest {
+            return @(
+                [pscustomobject]@{
+                    id               = 'missing-principal'
+                    roleDefinitionId = 'role-1'
+                    directoryScopeId = '/'
+                },
+                [pscustomobject]@{
+                    id          = 'missing-role'
+                    principalId = 'user-1'
+                }
+            )
+        }
+
+        Get-InTUIPimEligibleDirectoryRole | Should -BeNullOrEmpty
+    }
+
+    It 'Should bypass cache when loading PIM eligible roles' {
+        Mock Invoke-InTUIGraphRequest {
+            return @(
+                [pscustomobject]@{
+                    id               = 'eligibility-1'
+                    principalId      = 'user-1'
+                    roleDefinitionId = 'role-1'
+                    directoryScopeId = '/'
+                    roleDefinition   = [pscustomobject]@{ displayName = 'Global Reader' }
+                }
+            )
+        } -ParameterFilter {
+            $Uri -like '*roleEligibilityScheduleInstances*' -and $Beta -and $All -and $NoCache
+        }
+
+        $roles = Get-InTUIPimEligibleDirectoryRole
+
+        $roles | Should -HaveCount 1
+
+        Should -Invoke Invoke-InTUIGraphRequest -Times 1 -Exactly -ParameterFilter {
+            $Uri -like '*roleEligibilityScheduleInstances*' -and $Beta -and $All -and $NoCache
+        }
+    }
+
+    It 'Should treat paged PIM dictionary rows as rows, not Graph envelopes' {
+        Mock Invoke-InTUIGraphRequest {
+            return @(
+                @{
+                    id               = 'eligibility-1'
+                    principalId      = 'user-1'
+                    roleDefinitionId = 'role-1'
+                    directoryScopeId = '/'
+                    roleDefinition   = @{ displayName = 'Global Reader' }
+                },
+                @{
+                    id               = 'eligibility-2'
+                    principalId      = 'user-1'
+                    roleDefinitionId = 'role-2'
+                    directoryScopeId = '/'
+                    roleDefinition   = @{ displayName = 'Intune Administrator' }
+                }
+            )
+        } -ParameterFilter {
+            $Uri -like '*roleEligibilityScheduleInstances*' -and $All
+        }
+
+        $roles = Get-InTUIPimEligibleDirectoryRole
+
+        $roles | Should -HaveCount 2
+        $roles.DisplayName | Should -Contain 'Global Reader'
+        $roles.DisplayName | Should -Contain 'Intune Administrator'
+    }
+
+    It 'Should fall back to role eligibility schedules when schedule instances do not convert' {
+        Mock Invoke-InTUIGraphRequest {
+            return @(
+                [pscustomobject]@{
+                    id               = 'missing-principal'
+                    roleDefinitionId = 'role-1'
+                    directoryScopeId = '/'
+                }
+            )
+        } -ParameterFilter { $Uri -like '*roleEligibilityScheduleInstances*' }
+        Mock Invoke-InTUIGraphRequest {
+            return @(
+                [pscustomobject]@{
+                    id               = 'schedule-1'
+                    principalId      = 'user-1'
+                    roleDefinitionId = 'role-1'
+                    directoryScopeId = '/'
+                    memberType       = 'Direct'
+                    status           = 'Provisioned'
+                }
+            )
+        } -ParameterFilter { $Uri -like '*roleEligibilitySchedules*' }
+        Mock Invoke-InTUIGraphRequest {
+            return @(
+                [pscustomobject]@{
+                    id          = 'role-1'
+                    displayName = 'Global Reader'
+                }
+            )
+        } -ParameterFilter { $Uri -like '*roleDefinitions*' }
+
+        $roles = Get-InTUIPimEligibleDirectoryRole
+
+        $roles | Should -HaveCount 1
+        $roles[0].DisplayName | Should -Be 'Global Reader'
+        $roles[0].PrincipalId | Should -Be 'user-1'
+    }
+
+    It 'Should bypass cache when loading PIM active roles' {
+        Mock Invoke-InTUIGraphRequest { return @() } -ParameterFilter {
+            $Uri -like '*roleAssignmentScheduleInstances*' -and $Beta -and $All -and $NoCache
+        }
+
+        Get-InTUIPimActiveDirectoryRole | Should -BeNullOrEmpty
+
+        Should -Invoke Invoke-InTUIGraphRequest -Times 1 -Exactly -ParameterFilter {
+            $Uri -like '*roleAssignmentScheduleInstances*' -and $Beta -and $All -and $NoCache
+        }
+    }
+
+    It 'Should exclude already-active roles by role definition and scope' {
+        $eligible = @(
+            [pscustomobject]@{ DisplayName = 'Global Reader'; RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null },
+            [pscustomobject]@{ DisplayName = 'Security Reader'; RoleDefinitionId = 'role-2'; DirectoryScopeId = '/administrativeUnits/au-1'; AppScopeId = $null }
+        )
+        $active = @(
+            [pscustomobject]@{ DisplayName = 'Global Reader'; RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null }
+        )
+
+        $result = Select-InTUIPimActivatableRole -EligibleRoles $eligible -ActiveRoles $active
+
+        $result | Should -HaveCount 1
+        $result[0].DisplayName | Should -Be 'Security Reader'
+    }
+
+    It 'Should keep eligible roles visible when active assignments are also present' {
+        $eligible = @(
+            [pscustomobject]@{ DisplayName = 'Global Administrator'; RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null },
+            [pscustomobject]@{ DisplayName = 'Intune Administrator'; RoleDefinitionId = 'role-2'; DirectoryScopeId = '/'; AppScopeId = $null },
+            [pscustomobject]@{ DisplayName = 'User Administrator'; RoleDefinitionId = 'role-3'; DirectoryScopeId = '/'; AppScopeId = $null },
+            [pscustomobject]@{ DisplayName = 'Global Reader'; RoleDefinitionId = 'role-4'; DirectoryScopeId = '/'; AppScopeId = $null }
+        )
+        $active = @(
+            [pscustomobject]@{ DisplayName = 'Global Administrator'; RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null }
+        )
+
+        $availableRoles = @($eligible)
+
+        $active | Should -HaveCount 1
+        $availableRoles | Should -HaveCount 4
+        $availableRoles.DisplayName | Should -Contain 'Intune Administrator'
+        $availableRoles.DisplayName | Should -Contain 'User Administrator'
+        $availableRoles.DisplayName | Should -Contain 'Global Reader'
+    }
+
+    It 'Should build selfActivate request body preserving directory scope' {
+        $role = [pscustomobject]@{
+            PrincipalId      = 'user-1'
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/administrativeUnits/au-1'
+            AppScopeId       = $null
+        }
+        $start = [datetime]'2026-05-17T20:00:00Z'
+
+        $body = New-InTUIPimActivationRequestBody -Role $role -Hours 3 -Reason 'INC12345' -StartDateTime $start
+
+        $body.action | Should -Be 'selfActivate'
+        $body.principalId | Should -Be 'user-1'
+        $body.roleDefinitionId | Should -Be 'role-1'
+        $body.directoryScopeId | Should -Be '/administrativeUnits/au-1'
+        $body.justification | Should -Be 'INC12345'
+        $body.scheduleInfo.expiration.type | Should -Be 'afterDuration'
+        $body.scheduleInfo.expiration.duration | Should -Be 'PT3H'
+    }
+
+    It 'Should throw when building an activation body with an empty reason' {
+        $role = [pscustomobject]@{
+            PrincipalId      = 'user-1'
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/'
+        }
+
+        { New-InTUIPimActivationRequestBody -Role $role -Hours 1 -Reason ' ' } | Should -Throw
+    }
+
+    It 'Should throw when building an activation body without a principal id' {
+        $role = [pscustomobject]@{
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/'
+        }
+
+        { New-InTUIPimActivationRequestBody -Role $role -Hours 1 -Reason 'INC12345' } | Should -Throw
+    }
+
+    It 'Should throw when building an activation body without a role definition id' {
+        $role = [pscustomobject]@{
+            PrincipalId      = 'user-1'
+            DirectoryScopeId = '/'
+        }
+
+        { New-InTUIPimActivationRequestBody -Role $role -Hours 1 -Reason 'INC12345' } | Should -Throw
+    }
+
+    It 'Should continue activating remaining roles after one failure' {
+        $roles = @(
+            [pscustomobject]@{ DisplayName = 'Global Reader'; PrincipalId = 'user-1'; RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null },
+            [pscustomobject]@{ DisplayName = 'Security Reader'; PrincipalId = 'user-1'; RoleDefinitionId = 'role-2'; DirectoryScopeId = '/'; AppScopeId = $null }
+        )
+        $callCount = 0
+        Mock Invoke-InTUIGraphRequest {
+            $script:LastGraphError = [pscustomobject]@{ Message = 'Denied by policy' }
+            return $null
+        } -ParameterFilter { $Body.roleDefinitionId -eq 'role-1' }
+        Mock Invoke-InTUIGraphRequest {
+            $callCount++
+            return [pscustomobject]@{ id = 'request-2'; status = 'Granted' }
+        } -ParameterFilter { $Body.roleDefinitionId -eq 'role-2' }
+
+        $results = Invoke-InTUIPimRoleActivation -Roles $roles -Hours 1 -Reason 'INC12345 investigating a device'
+
+        $results | Should -HaveCount 2
+        $results[0].Status | Should -Be 'Failed'
+        $results[0].Error | Should -Be 'Denied by policy'
+        $results[1].Status | Should -Be 'Granted'
+        $results[1].RequestId | Should -Be 'request-2'
+    }
+
+    It 'Should not log full reason text when activating roles' {
+        $testLogDir = Join-Path $TestDrive "logs_$(Get-Random)"
+        New-Item -Path $testLogDir -ItemType Directory -Force | Out-Null
+        Initialize-InTUILog -LogDirectory $testLogDir
+        $role = [pscustomobject]@{
+            DisplayName      = 'Global Reader'
+            PrincipalId      = 'user-1'
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/'
+            AppScopeId       = $null
+        }
+        Mock Invoke-InTUIGraphRequest {
+            return [pscustomobject]@{ id = 'request-1'; status = 'Granted' }
+        }
+
+        Invoke-InTUIPimRoleActivation -Roles @($role) -Hours 1 -Reason 'INC12345 investigating highly sensitive customer issue'
+
+        $content = Get-Content $script:LogFilePath -Raw
+        $content | Should -Not -Match 'highly sensitive customer issue'
+        $content | Should -Match 'redacted'
     }
 }

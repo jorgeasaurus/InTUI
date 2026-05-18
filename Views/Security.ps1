@@ -18,6 +18,7 @@
             'Endpoint Protection Policies',
             'Microsoft Defender Overview',
             'BitLocker Recovery Keys',
+            'Activate PIM Role',
             '-------------',
             'Back to Home'
         )
@@ -39,6 +40,9 @@
             'BitLocker Recovery Keys' {
                 Show-InTUIBitLockerKeys
             }
+            'Activate PIM Role' {
+                Show-InTUIPimRoleActivation
+            }
             'Back to Home' {
                 $exitView = $true
             }
@@ -47,6 +51,310 @@
             }
         }
     }
+}
+
+function Show-InTUIPimRoleActivation {
+    [CmdletBinding()]
+    param()
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Security', 'Entra ID PIM Role Activation')
+
+    if (-not $script:Connected) {
+        Show-InTUIWarning "Connect to Microsoft Graph before activating PIM roles."
+        Read-InTUIKey
+        return
+    }
+
+    if (-not (Test-InTUIPimDelegatedContext)) {
+        Show-InTUIError "PIM role activation requires an interactive delegated user connection. Service principal connections are not supported."
+        Read-InTUIKey
+        return
+    }
+
+    $data = Get-InTUIPimRoleActivationDataWithReconnect
+
+    if ($null -eq $data -or $data.PermissionError) {
+        Show-InTUIPimPermissionWarning
+        Read-InTUIKey
+        return
+    }
+
+    $eligibleRoles = @($data.Eligible)
+    $activeRoles = @($data.Active)
+    $availableRoles = @($eligibleRoles)
+
+    if ($activeRoles.Count -gt 0) {
+        Show-InTUIInfo "$($activeRoles.Count) active role assignment(s) found. Eligible roles are still shown for activation."
+    }
+
+    if ($availableRoles.Count -eq 0) {
+        Show-InTUIWarning "No eligible Entra ID directory roles found for this account."
+        Write-InTUIText "[grey]- You may not have direct eligible PIM assignments.[/]"
+        Write-InTUIText "[grey]- Group-based PIM eligibility is not included in this view.[/]"
+        Write-InTUIText "[grey]- The current connection may lack PIM permissions.[/]"
+        Read-InTUIKey
+        return
+    }
+
+    $roleChoices = @()
+    foreach ($role in $availableRoles) {
+        $scope = Get-InTUIPimScopeLabel -DirectoryScopeId $role.DirectoryScopeId
+        $roleChoices += "[white]$(ConvertTo-InTUISafeMarkup -Text $role.DisplayName)[/] [grey]| Scope: $scope[/]"
+    }
+
+    $choiceMap = Get-InTUIChoiceMap -Choices $roleChoices
+    $selectedChoices = @(Show-InTUIMultiSelect -Title "[red]Select PIM roles to activate[/]" -Choices $choiceMap.Choices -PageSize 15)
+    if ($selectedChoices.Count -eq 0) {
+        return
+    }
+
+    $selectedRoles = @(Resolve-InTUIPimSelectedRole -SelectedChoices $selectedChoices -ChoiceMap $choiceMap -AvailableRoles $availableRoles)
+
+    if ($selectedRoles.Count -eq 0) {
+        return
+    }
+
+    $hours = Read-InTUIPimDurationInput -MaximumHours 8
+    if ($null -eq $hours) {
+        return
+    }
+
+    $reason = Read-InTUIPimReasonInput
+    if (-not (Test-InTUIPimReason -Reason $reason)) {
+        return
+    }
+
+    if (-not (Confirm-InTUIPimActivation -Roles $selectedRoles -Hours $hours -Reason $reason)) {
+        return
+    }
+
+    $results = Show-InTUILoading -Title "[red]Submitting PIM activation request(s)...[/]" -ScriptBlock {
+        Invoke-InTUIPimRoleActivation -Roles $selectedRoles -Hours $hours -Reason $reason
+    }
+
+    Start-Sleep -Seconds 2
+    $refreshedActive = Show-InTUILoading -Title "[red]Refreshing activation status...[/]" -ScriptBlock {
+        @(Get-InTUIPimActiveDirectoryRole)
+    }
+    Update-InTUIPimActivationResultsFromActiveRoles -Results $results -ActiveRoles $refreshedActive
+
+    Show-InTUIPimActivationResults -Results $results
+    Read-InTUIKey
+}
+
+function Get-InTUIPimRoleActivationDataWithReconnect {
+    [CmdletBinding()]
+    param()
+
+    for ($attempt = 0; $attempt -lt 2; $attempt++) {
+        $data = Get-InTUIPimRoleActivationData
+        if (-not $data.PermissionError) {
+            return $data
+        }
+
+        Show-InTUIPimPermissionWarning
+        if (-not (Show-InTUIConfirm -Message "[yellow]Reconnect with PIM permissions now?[/]")) {
+            Read-InTUIKey
+            return $null
+        }
+
+        if (-not (Connect-InTUIPimPermissions)) {
+            Show-InTUIError "Reconnect with PIM permissions failed."
+            Read-InTUIKey
+            return $null
+        }
+
+        Clear-Host
+        Show-InTUIHeader
+        Show-InTUIBreadcrumb -Path @('Home', 'Security', 'Entra ID PIM Role Activation')
+    }
+
+    return $data
+}
+
+function Get-InTUIPimRoleActivationData {
+    [CmdletBinding()]
+    param()
+
+    Show-InTUILoading -Title "[red]Loading eligible PIM roles...[/]" -ScriptBlock {
+        $script:LastGraphError = $null
+        $eligible = @(Get-InTUIPimEligibleDirectoryRole)
+        if (Test-InTUIPimPermissionError -ErrorInfo $script:LastGraphError) {
+            return @{ PermissionError = $true; Eligible = @(); Active = @() }
+        }
+
+        $active = @(Get-InTUIPimActiveDirectoryRole)
+        if (Test-InTUIPimPermissionError -ErrorInfo $script:LastGraphError) {
+            return @{ PermissionError = $true; Eligible = @(); Active = @() }
+        }
+
+        @{
+            PermissionError = $false
+            Eligible        = $eligible
+            Active          = $active
+        }
+    }
+}
+
+function Connect-InTUIPimPermissions {
+    [CmdletBinding()]
+    param()
+
+    $tenantId = $script:TenantId
+    $environment = if ($script:CloudEnvironment) { $script:CloudEnvironment } else { 'Global' }
+
+    Connect-InTUI -TenantId $tenantId -Environment $environment -Scopes (Get-InTUIPimConnectionScopes)
+}
+
+function Resolve-InTUIPimSelectedRole {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$SelectedChoices,
+
+        [Parameter(Mandatory)]
+        [hashtable]$ChoiceMap,
+
+        [Parameter(Mandatory)]
+        [object[]]$AvailableRoles
+    )
+
+    $selectedRoles = @()
+    foreach ($choice in $SelectedChoices) {
+        $idx = $ChoiceMap.IndexMap[$choice]
+        if ($null -ne $idx -and $idx -lt $AvailableRoles.Count) {
+            $selectedRoles += $AvailableRoles[$idx]
+        }
+    }
+
+    return $selectedRoles
+}
+
+function Read-InTUIPimDurationInput {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [int]$MaximumHours = 8
+    )
+
+    while ($true) {
+        $value = Read-InTUITextInput -Message "[red]Duration in hours[/]" -DefaultAnswer '1'
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            return $null
+        }
+
+        $hours = 0
+        if ([int]::TryParse($value, [ref]$hours) -and $hours -ge 1 -and $hours -le $MaximumHours) {
+            return $hours
+        }
+
+        Show-InTUIWarning "Enter a whole number from 1 to $MaximumHours."
+    }
+}
+
+function Read-InTUIPimReasonInput {
+    [CmdletBinding()]
+    param()
+
+    while ($true) {
+        $reason = Read-InTUITextInput -Message "[red]Reason for activation[/]"
+        if (Test-InTUIPimReason -Reason $reason) {
+            return $reason.Trim()
+        }
+
+        Show-InTUIWarning "Activation reason is required."
+    }
+}
+
+function Confirm-InTUIPimActivation {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object[]]$Roles,
+
+        [Parameter(Mandatory)]
+        [int]$Hours,
+
+        [Parameter(Mandatory)]
+        [string]$Reason
+    )
+
+    $roleLines = @($Roles | ForEach-Object {
+        $scope = Get-InTUIPimScopeLabel -DirectoryScopeId $_.DirectoryScopeId
+        "- $($_.DisplayName) ($scope)"
+    })
+    $content = @"
+[bold white]Selected roles:[/]
+$($roleLines -join "`n")
+
+[grey]Duration:[/] $Hours hour(s)
+[grey]Reason:[/] $Reason
+"@
+
+    Show-InTUIPanel -Title "[red]Review PIM Activation[/]" -Content $content -BorderColor Red
+    return (Show-InTUIConfirm -Message "[yellow]Submit activation request(s)?[/]")
+}
+
+function Update-InTUIPimActivationResultsFromActiveRoles {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [object[]]$Results = @(),
+
+        [Parameter()]
+        [object[]]$ActiveRoles = @()
+    )
+
+    $activeKeys = @{}
+    foreach ($role in @($ActiveRoles)) {
+        $activeKeys[(Get-InTUIPimRoleKey -Role $role)] = $true
+    }
+
+    foreach ($result in @($Results)) {
+        if ($result.Status -eq 'Failed' -or $null -eq $result.Role) {
+            continue
+        }
+
+        if ($activeKeys.ContainsKey((Get-InTUIPimRoleKey -Role $result.Role))) {
+            $result.Status = 'Activated'
+        }
+    }
+}
+
+function Show-InTUIPimActivationResults {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [object[]]$Results = @()
+    )
+
+    $rows = @()
+    foreach ($result in @($Results)) {
+        $statusColor = switch -Regex ($result.Status) {
+            'Activated|Granted|Provisioned' { 'green' }
+            'Pending|Approval'             { 'yellow' }
+            'Failed|Denied'                { 'red' }
+            default                        { 'blue' }
+        }
+        $detail = if ($result.Error) { $result.Error } elseif ($result.RequestId) { $result.RequestId } else { 'N/A' }
+        $rows += , @(
+            ($result.RoleName ?? 'Unknown role'),
+            "[$statusColor]$($result.Status)[/]",
+            $detail
+        )
+    }
+
+    Show-InTUITable -Title "PIM Activation Results" -Columns @('Role', 'Status', 'Request/Error') -Rows $rows -BorderColor Red
+}
+
+function Show-InTUIPimPermissionWarning {
+    [CmdletBinding()]
+    param()
+
+    $scopes = (Get-InTUIPimRequiredScopes) -join ', '
+    Show-InTUIWarning "PIM role activation requires delegated Graph permissions: $scopes."
 }
 
 function Show-InTUISecurityBaselineList {

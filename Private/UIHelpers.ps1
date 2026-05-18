@@ -275,7 +275,7 @@ function Show-InTUIMultiSelect {
             $selected += $Choices[$idx]
         }
     }
-    return , $selected
+    return $selected
 }
 
 function Get-InTUIChoiceMap {

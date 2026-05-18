@@ -139,7 +139,14 @@ function Invoke-InTUIGraphRequest {
         [int]$Top = 0,
 
         [Parameter()]
-        [hashtable]$Headers
+        [hashtable]$Headers,
+
+        [Parameter()]
+        [ValidateRange(1, 10000)]
+        [int]$MaxPages = 500,
+
+        [Parameter()]
+        [switch]$NoCache
     )
 
     if (-not $script:Connected) {
@@ -163,7 +170,7 @@ function Invoke-InTUIGraphRequest {
     }
 
     # Check cache for GET requests
-    if ($Method -eq 'GET' -and $script:CacheEnabled) {
+    if ($Method -eq 'GET' -and $script:CacheEnabled -and -not $NoCache) {
         $cached = Get-InTUICachedResponse -Uri $fullUri -Method $Method -Beta:$Beta
         if ($null -ne $cached) {
             return $cached
@@ -211,6 +218,10 @@ function Invoke-InTUIGraphRequest {
             $pageCount = 1
             while ($response.'@odata.nextLink') {
                 $pageCount++
+                if ($pageCount -gt $MaxPages) {
+                    throw "Graph pagination exceeded max page limit of $MaxPages for '$fullUri'."
+                }
+
                 Write-InTUILog -Message "Fetching pagination page $pageCount" -Context @{ NextLink = $response.'@odata.nextLink' }
                 $response = Invoke-MgGraphRequest -Uri $response.'@odata.nextLink' -Method GET -OutputType PSObject
                 if ($response.value) {
@@ -221,7 +232,7 @@ function Invoke-InTUIGraphRequest {
             Write-InTUILog -Message "Graph API request completed" -Context @{ TotalResults = $allResults.Count; Pages = $pageCount }
 
             # Cache the paginated results
-            if ($script:CacheEnabled) {
+            if ($script:CacheEnabled -and -not $NoCache) {
                 Set-InTUICachedResponse -Uri $fullUri -Data $allResults -Method $Method -Beta:$Beta
             }
 
@@ -232,7 +243,7 @@ function Invoke-InTUIGraphRequest {
         Write-InTUILog -Message "Graph API request completed" -Context @{ ResultCount = $resultCount }
 
         # Cache single-page response
-        if ($Method -eq 'GET' -and $script:CacheEnabled) {
+        if ($Method -eq 'GET' -and $script:CacheEnabled -and -not $NoCache) {
             Set-InTUICachedResponse -Uri $fullUri -Data $response -Method $Method -Beta:$Beta
         }
 
