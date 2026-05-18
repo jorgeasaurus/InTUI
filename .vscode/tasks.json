@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Bootstrap: Install Dependencies",
+            "label": "Install Dependencies",
             "type": "shell",
             "command": "pwsh",
             "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1"],
@@ -11,7 +11,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Build: Analyze (PSScriptAnalyzer)",
+            "label": "PSScriptAnalyzer",
             "type": "shell",
             "command": "pwsh",
             "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "Analyze"],
@@ -20,7 +20,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Build: Test (Pester)",
+            "label": "Test (Pester)",
             "type": "shell",
             "command": "pwsh",
             "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "Test"],
@@ -29,7 +29,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Build: Build Module",
+            "label": "Build Module",
             "type": "shell",
             "command": "pwsh",
             "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "Build"],
@@ -38,7 +38,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Build: Full CI (Analyze + Test + Build)",
+            "label": "Full CI",
             "type": "shell",
             "command": "pwsh",
             "args": ["-NoProfile", "-File", "${workspaceFolder}/build.ps1", "-Task", "CI"],
