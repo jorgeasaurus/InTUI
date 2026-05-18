@@ -112,6 +112,61 @@ function Connect-InTUIGraph {
     }
 }
 
+function Get-InTUIGraphErrorMessage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    $errorMessage = $ErrorRecord.Exception.Message
+    $rawDetails = $ErrorRecord.ErrorDetails.Message
+
+    if ([string]::IsNullOrWhiteSpace($rawDetails)) {
+        $responseContent = $ErrorRecord.Exception.Response?.Content
+        if ($null -ne $responseContent) {
+            try {
+                $rawDetails = $responseContent.ReadAsStringAsync().GetAwaiter().GetResult()
+            }
+            catch {
+                $rawDetails = $null
+            }
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($rawDetails)) {
+        try {
+            $errorDetail = $rawDetails | ConvertFrom-Json
+            if ($errorDetail.error) {
+                $code = [string]$errorDetail.error.code
+                $message = [string]$errorDetail.error.message
+                $errorMessage = if ([string]::IsNullOrWhiteSpace($code)) { $message } else { "$code`: $message" }
+            }
+            elseif ($errorDetail.message) {
+                $errorMessage = [string]$errorDetail.message
+            }
+            else {
+                $errorMessage = $rawDetails
+            }
+        }
+        catch {
+            $errorMessage = $rawDetails
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($errorMessage)) {
+        $errorMessage = "Request failed (HTTP $($ErrorRecord.Exception.Response.StatusCode))"
+        if ($ErrorRecord.Exception.Response.ReasonPhrase) {
+            $errorMessage += " - $($ErrorRecord.Exception.Response.ReasonPhrase)"
+        }
+    }
+
+    return [pscustomobject]@{
+        Message = $errorMessage
+        RawBody = $rawDetails
+    }
+}
+
 function Invoke-InTUIGraphRequest {
     <#
     .SYNOPSIS
@@ -251,29 +306,15 @@ function Invoke-InTUIGraphRequest {
         return ($response ?? $true)
     }
     catch {
-        $errorMessage = $_.Exception.Message
-        if ($_.ErrorDetails.Message) {
-            try {
-                $errorDetail = $_.ErrorDetails.Message | ConvertFrom-Json
-                $errorMessage = "$($errorDetail.error.code): $($errorDetail.error.message)"
-            }
-            catch {
-                $errorMessage = $_.ErrorDetails.Message
-            }
-        }
-        # Fallback if message is still empty
-        if ([string]::IsNullOrWhiteSpace($errorMessage)) {
-            $errorMessage = "Request failed (HTTP $($_.Exception.Response.StatusCode))"
-            if ($_.Exception.Response.ReasonPhrase) {
-                $errorMessage += " - $($_.Exception.Response.ReasonPhrase)"
-            }
-        }
+        $graphError = Get-InTUIGraphErrorMessage -ErrorRecord $_
+        $errorMessage = $graphError.Message
         Write-InTUILog -Level 'ERROR' -Message "Graph API Error: $errorMessage" -Context @{ Uri = $fullUri; Method = $Method }
         $script:LastGraphError = [pscustomobject]@{
             Message    = $errorMessage
             Uri        = $fullUri
             Method     = $Method
             StatusCode = $_.Exception.Response.StatusCode
+            RawBody    = $graphError.RawBody
         }
         Write-InTUIText "[red]Graph API Error: $errorMessage[/]"
         return $null

@@ -1551,6 +1551,29 @@ Describe 'Invoke-InTUIGraphRequest URI Construction' {
         $result | Should -BeNullOrEmpty
         $script:LastGraphError.Message | Should -Match 'pagination exceeded max page limit'
     }
+
+    It 'Should preserve Graph JSON error details' {
+        $script:GraphBaseUrl = 'https://graph.microsoft.com/v1.0'
+
+        Mock Invoke-MgGraphRequest -MockWith {
+            $exception = [System.Exception]::new('Bad Request')
+            $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                $exception,
+                'BadRequest',
+                [System.Management.Automation.ErrorCategory]::InvalidOperation,
+                $null
+            )
+            $errorRecord.ErrorDetails = [System.Management.Automation.ErrorDetails]::new(
+                '{"error":{"code":"RoleAssignmentRequestPolicyValidationFailed","message":"Minimum activation duration has not elapsed."}}'
+            )
+            throw $errorRecord
+        }
+
+        $result = Invoke-InTUIGraphRequest -Uri '/roleManagement/directory/roleAssignmentScheduleRequests' -Method POST -Body @{ action = 'selfDeactivate' }
+
+        $result | Should -BeNullOrEmpty
+        $script:LastGraphError.Message | Should -Be 'RoleAssignmentRequestPolicyValidationFailed: Minimum activation duration has not elapsed.'
+    }
 }
 
 Describe 'Connect-InTUIGraph Parameter Validation' {
@@ -2332,6 +2355,7 @@ Describe 'PIM Role Activation Helpers' {
 
     It 'Should build selfActivate request body preserving directory scope' {
         $role = [pscustomobject]@{
+            Id               = 'assignment-1'
             PrincipalId      = 'user-1'
             RoleDefinitionId = 'role-1'
             DirectoryScopeId = '/administrativeUnits/au-1'
@@ -2378,10 +2402,63 @@ Describe 'PIM Role Activation Helpers' {
         { New-InTUIPimActivationRequestBody -Role $role -Hours 1 -Reason 'INC12345' } | Should -Throw
     }
 
+    It 'Should build selfDeactivate request body preserving directory scope' {
+        $role = [pscustomobject]@{
+            PrincipalId      = 'user-1'
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/administrativeUnits/au-1'
+            AppScopeId       = $null
+        }
+
+        $body = New-InTUIPimDeactivationRequestBody -Role $role -Reason 'Done'
+
+        $body.action | Should -Be 'selfDeactivate'
+        $body.principalId | Should -Be 'user-1'
+        $body.roleDefinitionId | Should -Be 'role-1'
+        $body.directoryScopeId | Should -Be '/administrativeUnits/au-1'
+        $body.targetScheduleId | Should -Be 'assignment-1'
+        $body.justification | Should -Be 'Done'
+        $body.ContainsKey('scheduleInfo') | Should -BeFalse
+    }
+
+    It 'Should allow selfDeactivate request body without a reason' {
+        $role = [pscustomobject]@{
+            Id               = 'assignment-1'
+            PrincipalId      = 'user-1'
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/'
+        }
+
+        $body = New-InTUIPimDeactivationRequestBody -Role $role -Reason ' '
+
+        $body.action | Should -Be 'selfDeactivate'
+        $body.ContainsKey('justification') | Should -BeFalse
+    }
+
+    It 'Should throw when building a deactivation body without a principal id' {
+        $role = [pscustomobject]@{
+            Id               = 'assignment-1'
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/'
+        }
+
+        { New-InTUIPimDeactivationRequestBody -Role $role } | Should -Throw
+    }
+
+    It 'Should throw when building a deactivation body without an active assignment id' {
+        $role = [pscustomobject]@{
+            PrincipalId      = 'user-1'
+            RoleDefinitionId = 'role-1'
+            DirectoryScopeId = '/'
+        }
+
+        { New-InTUIPimDeactivationRequestBody -Role $role } | Should -Throw
+    }
+
     It 'Should continue activating remaining roles after one failure' {
         $roles = @(
-            [pscustomobject]@{ DisplayName = 'Global Reader'; PrincipalId = 'user-1'; RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null },
-            [pscustomobject]@{ DisplayName = 'Security Reader'; PrincipalId = 'user-1'; RoleDefinitionId = 'role-2'; DirectoryScopeId = '/'; AppScopeId = $null }
+            [pscustomobject]@{ Id = 'assignment-1'; DisplayName = 'Global Reader'; PrincipalId = 'user-1'; RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null },
+            [pscustomobject]@{ Id = 'assignment-2'; DisplayName = 'Security Reader'; PrincipalId = 'user-1'; RoleDefinitionId = 'role-2'; DirectoryScopeId = '/'; AppScopeId = $null }
         )
         $callCount = 0
         Mock Invoke-InTUIGraphRequest {
@@ -2422,5 +2499,38 @@ Describe 'PIM Role Activation Helpers' {
         $content = Get-Content $script:LogFilePath -Raw
         $content | Should -Not -Match 'highly sensitive customer issue'
         $content | Should -Match 'redacted'
+    }
+
+    It 'Should continue deactivating remaining roles after one failure' {
+        $roles = @(
+            [pscustomobject]@{ DisplayName = 'Global Reader'; PrincipalId = 'user-1'; RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null },
+            [pscustomobject]@{ DisplayName = 'Security Reader'; PrincipalId = 'user-1'; RoleDefinitionId = 'role-2'; DirectoryScopeId = '/'; AppScopeId = $null }
+        )
+        Mock Invoke-InTUIGraphRequest {
+            $script:LastGraphError = [pscustomobject]@{ Message = 'Denied by policy' }
+            return $null
+        } -ParameterFilter { $Body.roleDefinitionId -eq 'role-1' }
+        Mock Invoke-InTUIGraphRequest {
+            return [pscustomobject]@{ id = 'request-2'; status = 'Provisioned' }
+        } -ParameterFilter { $Body.roleDefinitionId -eq 'role-2' }
+
+        $results = Invoke-InTUIPimRoleDeactivation -Roles $roles -Reason 'Done'
+
+        $results | Should -HaveCount 2
+        $results[0].Status | Should -Be 'Failed'
+        $results[0].Error | Should -Be 'Denied by policy'
+        $results[1].Status | Should -Be 'Provisioned'
+        $results[1].RequestId | Should -Be 'request-2'
+    }
+
+    It 'Should mark deactivation results when active role disappears' {
+        $result = [pscustomobject]@{
+            Role   = [pscustomobject]@{ RoleDefinitionId = 'role-1'; DirectoryScopeId = '/'; AppScopeId = $null }
+            Status = 'Provisioned'
+        }
+
+        Update-InTUIPimDeactivationResultsFromActiveRoles -Results @($result) -ActiveRoles @()
+
+        $result.Status | Should -Be 'Deactivated'
     }
 }

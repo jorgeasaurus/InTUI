@@ -18,7 +18,8 @@
             'Endpoint Protection Policies',
             'Microsoft Defender Overview',
             'BitLocker Recovery Keys',
-            'Activate PIM Role',
+            'Activate PIM Role(s)',
+            'Deactivate PIM Role(s)',
             '-------------',
             'Back to Home'
         )
@@ -40,8 +41,11 @@
             'BitLocker Recovery Keys' {
                 Show-InTUIBitLockerKeys
             }
-            'Activate PIM Role' {
+            'Activate PIM Role(s)' {
                 Show-InTUIPimRoleActivation
+            }
+            'Deactivate PIM Role(s)' {
+                Show-InTUIPimRoleDeactivation
             }
             'Back to Home' {
                 $exitView = $true
@@ -144,6 +148,79 @@ function Show-InTUIPimRoleActivation {
     Read-InTUIKey
 }
 
+function Show-InTUIPimRoleDeactivation {
+    [CmdletBinding()]
+    param()
+
+    Clear-Host
+    Show-InTUIHeader
+    Show-InTUIBreadcrumb -Path @('Home', 'Security', 'Entra ID PIM Role Deactivation')
+
+    if (-not $script:Connected) {
+        Show-InTUIWarning "Connect to Microsoft Graph before deactivating PIM roles."
+        Read-InTUIKey
+        return
+    }
+
+    if (-not (Test-InTUIPimDelegatedContext)) {
+        Show-InTUIError "PIM role deactivation requires an interactive delegated user connection. Service principal connections are not supported."
+        Read-InTUIKey
+        return
+    }
+
+    $data = Get-InTUIPimActiveRoleDataWithReconnect
+
+    if ($null -eq $data -or $data.PermissionError) {
+        Show-InTUIPimPermissionWarning
+        Read-InTUIKey
+        return
+    }
+
+    $activeRoles = @($data.Active)
+    if ($activeRoles.Count -eq 0) {
+        Show-InTUIWarning "No active Entra ID PIM directory roles found for this account."
+        Write-InTUIText "[grey]- Activate a role first, or wait for Graph to reflect the active assignment.[/]"
+        Write-InTUIText "[grey]- Group-based PIM activation is not included in this view.[/]"
+        Read-InTUIKey
+        return
+    }
+
+    $roleChoices = @()
+    foreach ($role in $activeRoles) {
+        $scope = Get-InTUIPimScopeLabel -DirectoryScopeId $role.DirectoryScopeId
+        $roleChoices += "[white]$(ConvertTo-InTUISafeMarkup -Text $role.DisplayName)[/] [grey]| Scope: $scope[/]"
+    }
+
+    $choiceMap = Get-InTUIChoiceMap -Choices $roleChoices
+    $selectedChoices = @(Show-InTUIMultiSelect -Title "[red]Select active PIM roles to deactivate[/]" -Choices $choiceMap.Choices -PageSize 15)
+    if ($selectedChoices.Count -eq 0) {
+        return
+    }
+
+    $selectedRoles = @(Resolve-InTUIPimSelectedRole -SelectedChoices $selectedChoices -ChoiceMap $choiceMap -AvailableRoles $activeRoles)
+    if ($selectedRoles.Count -eq 0) {
+        return
+    }
+
+    $reason = Read-InTUIPimOptionalReasonInput
+    if (-not (Confirm-InTUIPimDeactivation -Roles $selectedRoles -Reason $reason)) {
+        return
+    }
+
+    $results = Show-InTUILoading -Title "[red]Submitting PIM deactivation request(s)...[/]" -ScriptBlock {
+        Invoke-InTUIPimRoleDeactivation -Roles $selectedRoles -Reason $reason
+    }
+
+    Start-Sleep -Seconds 2
+    $refreshedActive = Show-InTUILoading -Title "[red]Refreshing active role status...[/]" -ScriptBlock {
+        @(Get-InTUIPimActiveDirectoryRole)
+    }
+    Update-InTUIPimDeactivationResultsFromActiveRoles -Results $results -ActiveRoles $refreshedActive
+
+    Show-InTUIPimActivationResults -Title "PIM Deactivation Results" -Results $results
+    Read-InTUIKey
+}
+
 function Get-InTUIPimRoleActivationDataWithReconnect {
     [CmdletBinding()]
     param()
@@ -174,6 +251,36 @@ function Get-InTUIPimRoleActivationDataWithReconnect {
     return $data
 }
 
+function Get-InTUIPimActiveRoleDataWithReconnect {
+    [CmdletBinding()]
+    param()
+
+    for ($attempt = 0; $attempt -lt 2; $attempt++) {
+        $data = Get-InTUIPimActiveRoleData
+        if (-not $data.PermissionError) {
+            return $data
+        }
+
+        Show-InTUIPimPermissionWarning
+        if (-not (Show-InTUIConfirm -Message "[yellow]Reconnect with PIM permissions now?[/]")) {
+            Read-InTUIKey
+            return $null
+        }
+
+        if (-not (Connect-InTUIPimPermissions)) {
+            Show-InTUIError "Reconnect with PIM permissions failed."
+            Read-InTUIKey
+            return $null
+        }
+
+        Clear-Host
+        Show-InTUIHeader
+        Show-InTUIBreadcrumb -Path @('Home', 'Security', 'Entra ID PIM Role Deactivation')
+    }
+
+    return $data
+}
+
 function Get-InTUIPimRoleActivationData {
     [CmdletBinding()]
     param()
@@ -193,6 +300,24 @@ function Get-InTUIPimRoleActivationData {
         @{
             PermissionError = $false
             Eligible        = $eligible
+            Active          = $active
+        }
+    }
+}
+
+function Get-InTUIPimActiveRoleData {
+    [CmdletBinding()]
+    param()
+
+    Show-InTUILoading -Title "[red]Loading active PIM roles...[/]" -ScriptBlock {
+        $script:LastGraphError = $null
+        $active = @(Get-InTUIPimActiveDirectoryRole)
+        if (Test-InTUIPimPermissionError -ErrorInfo $script:LastGraphError) {
+            return @{ PermissionError = $true; Active = @() }
+        }
+
+        @{
+            PermissionError = $false
             Active          = $active
         }
     }
@@ -268,6 +393,18 @@ function Read-InTUIPimReasonInput {
     }
 }
 
+function Read-InTUIPimOptionalReasonInput {
+    [CmdletBinding()]
+    param()
+
+    $reason = Read-InTUITextInput -Message "[red]Reason for deactivation[/] [grey](optional, press Enter to skip)[/]"
+    if ([string]::IsNullOrWhiteSpace($reason)) {
+        return ''
+    }
+
+    return $reason.Trim()
+}
+
 function Confirm-InTUIPimActivation {
     [CmdletBinding()]
     param(
@@ -297,6 +434,32 @@ $($roleLines -join "`n")
     return (Show-InTUIConfirm -Message "[yellow]Submit activation request(s)?[/]")
 }
 
+function Confirm-InTUIPimDeactivation {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object[]]$Roles,
+
+        [Parameter()]
+        [string]$Reason
+    )
+
+    $roleLines = @($Roles | ForEach-Object {
+        $scope = Get-InTUIPimScopeLabel -DirectoryScopeId $_.DirectoryScopeId
+        "- $($_.DisplayName) ($scope)"
+    })
+    $reasonLine = if ([string]::IsNullOrWhiteSpace($Reason)) { 'N/A' } else { $Reason }
+    $content = @"
+[bold white]Selected active roles:[/]
+$($roleLines -join "`n")
+
+[grey]Reason:[/] $reasonLine
+"@
+
+    Show-InTUIPanel -Title "[red]Review PIM Deactivation[/]" -Content $content -BorderColor Red
+    return (Show-InTUIConfirm -Message "[yellow]Submit deactivation request(s)?[/]")
+}
+
 function Update-InTUIPimActivationResultsFromActiveRoles {
     [CmdletBinding()]
     param(
@@ -323,9 +486,38 @@ function Update-InTUIPimActivationResultsFromActiveRoles {
     }
 }
 
+function Update-InTUIPimDeactivationResultsFromActiveRoles {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [object[]]$Results = @(),
+
+        [Parameter()]
+        [object[]]$ActiveRoles = @()
+    )
+
+    $activeKeys = @{}
+    foreach ($role in @($ActiveRoles)) {
+        $activeKeys[(Get-InTUIPimRoleKey -Role $role)] = $true
+    }
+
+    foreach ($result in @($Results)) {
+        if ($result.Status -eq 'Failed' -or $null -eq $result.Role) {
+            continue
+        }
+
+        if (-not $activeKeys.ContainsKey((Get-InTUIPimRoleKey -Role $result.Role))) {
+            $result.Status = 'Deactivated'
+        }
+    }
+}
+
 function Show-InTUIPimActivationResults {
     [CmdletBinding()]
     param(
+        [Parameter()]
+        [string]$Title = 'PIM Activation Results',
+
         [Parameter()]
         [object[]]$Results = @()
     )
@@ -346,7 +538,7 @@ function Show-InTUIPimActivationResults {
         )
     }
 
-    Show-InTUITable -Title "PIM Activation Results" -Columns @('Role', 'Status', 'Request/Error') -Rows $rows -BorderColor Red
+    Show-InTUITable -Title $Title -Columns @('Role', 'Status', 'Request/Error') -Rows $rows -BorderColor Red
 }
 
 function Show-InTUIPimPermissionWarning {

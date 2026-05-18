@@ -556,6 +556,48 @@ function New-InTUIPimActivationRequestBody {
     return $body
 }
 
+function New-InTUIPimDeactivationRequestBody {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Role,
+
+        [Parameter()]
+        [string]$Reason
+    )
+
+    if ([string]::IsNullOrWhiteSpace([string]$Role.PrincipalId)) {
+        throw 'PIM deactivation role is missing PrincipalId.'
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$Role.RoleDefinitionId)) {
+        throw 'PIM deactivation role is missing RoleDefinitionId.'
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$Role.Id)) {
+        throw 'PIM deactivation role is missing active assignment schedule Id.'
+    }
+
+    $body = @{
+        action           = 'selfDeactivate'
+        principalId      = $Role.PrincipalId
+        roleDefinitionId = $Role.RoleDefinitionId
+        directoryScopeId = if ($Role.DirectoryScopeId) { $Role.DirectoryScopeId } else { '/' }
+        isValidationOnly = $false
+        targetScheduleId = $Role.Id
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Reason)) {
+        $body['justification'] = $Reason.Trim()
+    }
+
+    if ($Role.AppScopeId) {
+        $body['appScopeId'] = $Role.AppScopeId
+    }
+
+    return $body
+}
+
 function Invoke-InTUIPimRoleActivation {
     [CmdletBinding()]
     param(
@@ -610,6 +652,76 @@ function Invoke-InTUIPimRoleActivation {
             RoleName         = $role.DisplayName
             RoleDefinitionId = $role.RoleDefinitionId
             DirectoryScopeId = $role.DirectoryScopeId
+            Status           = $status
+            RequestId        = $response.id
+            Reason           = $redactedReason
+        }
+
+        $results.Add([pscustomobject]@{
+            Role        = $role
+            RoleName    = $role.DisplayName
+            Status      = $status
+            RequestId   = $response.id
+            Error       = $null
+            RawResponse = $response
+        })
+    }
+
+    return $results.ToArray()
+}
+
+function Invoke-InTUIPimRoleDeactivation {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object[]]$Roles,
+
+        [Parameter()]
+        [string]$Reason
+    )
+
+    $results = [System.Collections.Generic.List[object]]::new()
+    $redactedReason = ConvertTo-InTUIPimRedactedReason -Reason $Reason
+
+    foreach ($role in @($Roles)) {
+        $body = New-InTUIPimDeactivationRequestBody -Role $role -Reason $Reason
+        Write-InTUILog -Message 'PIM deactivation requested' -Context @{
+            RoleName         = $role.DisplayName
+            RoleDefinitionId = $role.RoleDefinitionId
+            DirectoryScopeId = $role.DirectoryScopeId
+            TargetScheduleId = $role.Id
+            Reason           = $redactedReason
+        }
+
+        $response = Invoke-InTUIGraphRequest -Uri '/roleManagement/directory/roleAssignmentScheduleRequests' -Method POST -Body $body -Beta
+
+        if ($null -eq $response) {
+            $errorMessage = $script:LastGraphError.Message ?? 'Graph request failed'
+            Write-InTUILog -Level 'ERROR' -Message 'PIM deactivation failed' -Context @{
+                RoleName         = $role.DisplayName
+                RoleDefinitionId = $role.RoleDefinitionId
+                DirectoryScopeId = $role.DirectoryScopeId
+                TargetScheduleId = $role.Id
+                Error            = $errorMessage
+                Reason           = $redactedReason
+            }
+            $results.Add([pscustomobject]@{
+                Role        = $role
+                RoleName    = $role.DisplayName
+                Status      = 'Failed'
+                RequestId   = $null
+                Error       = $errorMessage
+                RawResponse = $null
+            })
+            continue
+        }
+
+        $status = $response.status ?? 'Submitted'
+        Write-InTUILog -Message 'PIM deactivation response received' -Context @{
+            RoleName         = $role.DisplayName
+            RoleDefinitionId = $role.RoleDefinitionId
+            DirectoryScopeId = $role.DirectoryScopeId
+            TargetScheduleId = $role.Id
             Status           = $status
             RequestId        = $response.id
             Reason           = $redactedReason
